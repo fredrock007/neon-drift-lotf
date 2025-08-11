@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1" />
-<title>Neon Drift: Endless Cyberpunk Racer + Quiz</title>
+<title>Neon Drift: LOTF Racer + Quiz</title>
 <style>
   :root{
     --bg:#05060a; --panel:#0e1220; --accent:#00e5ff; --accent2:#ff2bd6; --text:#e7f6ff; --good:#22c55e; --bad:#ef4444;
@@ -12,7 +12,7 @@
   #ui{
     position:fixed; inset:0 0 auto 0; display:flex; gap:12px; align-items:center; padding:10px 12px;
     background:linear-gradient(to bottom,rgba(0,0,0,.55),rgba(0,0,0,0));
-    user-select:none; -webkit-user-select:none; pointer-events:none;
+    user-select:none; -webkit-user-select:none; pointer-events:none; z-index:10;
   }
   .pill{pointer-events:auto; background:rgba(14,18,32,.6); border:1px solid #243056; border-radius:12px; padding:8px 10px; display:flex; gap:10px; align-items:center}
   .stat{font-weight:700}
@@ -20,12 +20,9 @@
   .btn.ghost{background:transparent;border:2px solid var(--accent);color:var(--text)}
   #overlay{
     position:fixed; inset:0; display:none; align-items:center; justify-content:center;
-    background:rgba(0,0,0,.65); backdrop-filter: blur(4px);
+    background:rgba(0,0,0,.65); backdrop-filter: blur(4px); z-index:20;
   }
-  .card{
-    width:min(720px,92vw); background:var(--panel); border:1px solid #26345e; border-radius:16px; padding:16px; box-shadow:0 20px 60px rgba(0,0,0,.45)
-  }
-  .card h2{margin:0 0 8px}
+  .card{width:min(720px,92vw); background:var(--panel); border:1px solid #26345e; border-radius:16px; padding:16px; box-shadow:0 20px 60px rgba(0,0,0,.45)}
   .meta{display:flex;gap:10px;align-items:center;opacity:.9}
   .timer{margin-left:auto;font-weight:900}
   .answers{display:grid; gap:10px; margin-top:10px}
@@ -35,11 +32,11 @@
   .no{background:rgba(239,68,68,.15); color:#ffc1c1; border:2px solid var(--bad)}
   #centerMsg{
     position:fixed; left:50%; top:14%; transform:translateX(-50%); font-weight:900; letter-spacing:.5px;
-    background:rgba(14,18,32,.6); border:1px solid #243056; border-radius:12px; padding:8px 12px; display:none
+    background:rgba(14,18,32,.6); border:1px solid #243056; border-radius:12px; padding:8px 12px; display:none; z-index:15;
   }
   #pad{
     position:fixed; right:14px; bottom:14px; display:grid; grid-template-columns:68px 68px; gap:10px;
-    opacity:.95; user-select:none
+    opacity:.95; user-select:none; z-index:10;
   }
   .ctl{
     background:rgba(14,18,32,.6); border:2px solid #2a3b6a; border-radius:14px; color:#cfe6ff; font-size:18px; font-weight:900;
@@ -49,9 +46,8 @@
   @media (min-width:880px){ #pad{display:none} }
   #toast{
     position:fixed; bottom:14px; left:50%; transform:translateX(-50%); background:#091022; color:#a8eaff;
-    border:1px solid #1d2a52; border-radius:12px; padding:8px 12px; display:none
+    border:1px solid #1d2a52; border-radius:12px; padding:8px 12px; display:none; z-index:15;
   }
-  a, a:visited{color:var(--accent)}
 </style>
 </head>
 <body>
@@ -111,14 +107,14 @@ renderer.setPixelRatio(DPR);
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
-/* ---------- Neon world lighting ---------- */
-const hemi = new THREE.HemisphereLight(0x1ae0ff, 0x090a12, 0.5);
+/* ---------- Lighting ---------- */
+const hemi = new THREE.HemisphereLight(0x1ae0ff, 0x090a12, 0.6);
 scene.add(hemi);
-const dir = new THREE.DirectionalLight(0xff2bd6, 0.6);
+const dir = new THREE.DirectionalLight(0xff2bd6, 0.7);
 dir.position.set(5, 8, 3);
 scene.add(dir);
 
-/* ---------- Track parameters ---------- */
+/* ---------- Track ---------- */
 const TRACK_WIDTH = 8;
 const SEG_LEN = 40;
 const SEG_COUNT = 12;
@@ -131,13 +127,38 @@ const neonMat = (c)=> new THREE.MeshStandardMaterial({
 const darkMat = new THREE.MeshStandardMaterial({color:0x0b0f1c, metalness:0.2, roughness:0.9});
 const glowLaneMat = (c)=> new THREE.MeshBasicMaterial({color:c});
 
-/* ---------- Build recycled track segments ---------- */
-const segments = [];
-const wallsLeft = [];
-const wallsRight = [];
-const floors = [];
-const laneStrips = [];
+/* Graffiti canvas texture: "Mr Samuels" */
+function makeGraffitiTexture(text="Mr Samuels"){
+  const c = document.createElement("canvas");
+  c.width = 1024; c.height = 256;
+  const g = c.getContext("2d");
+  // brick-ish dark wall
+  g.fillStyle = "#0b1020"; g.fillRect(0,0,c.width,c.height);
+  g.fillStyle = "#0e1428";
+  for(let x=0;x<c.width;x+=48){ for(let y=0;y<c.height;y+=24){ g.fillRect(x + (y%48?0:24), y, 44, 20); } }
+  // spray shadow
+  g.font = "900 120px Impact, Arial Black, sans-serif";
+  g.fillStyle = "#001d2d"; g.shadowColor="#00e5ff"; g.shadowBlur=24;
+  g.textAlign="center"; g.translate(c.width/2, c.height/2 + 35); g.rotate(-0.03);
+  g.fillText(text, 0, 0);
+  // bright outline
+  g.shadowBlur=0; g.lineWidth=10; g.strokeStyle="#ff2bd6";
+  g.strokeText(text, 0, 0);
+  // fill with neon gradient
+  const grd = g.createLinearGradient(-300,0,300,0);
+  grd.addColorStop(0,"#00e5ff"); grd.addColorStop(1,"#8b5cf6");
+  g.fillStyle = grd;
+  g.fillText(text, 0, 0);
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(2,1); // repeat along the long wall
+  tex.anisotropy = 8;
+  return tex;
+}
+const wallTex = makeGraffitiTexture("Mr Samuels");
 
+/* Build segments */
+const segments = [], wallsLeft=[], wallsRight=[], floors=[], laneStrips=[];
 const floorGeo = new THREE.PlaneGeometry(TRACK_WIDTH, SEG_LEN);
 const wallGeo  = new THREE.PlaneGeometry(SEG_LEN, WALL_H);
 const stripGeo = new THREE.PlaneGeometry(TRACK_WIDTH, 0.1);
@@ -148,72 +169,111 @@ for (let i=0;i<SEG_COUNT;i++){
   const floor = new THREE.Mesh(floorGeo, darkMat);
   floor.rotation.x = -Math.PI/2;
   floor.position.set(0, FLOOR_Y, -i*SEG_LEN);
-  group.add(floor);
-  floors.push(floor);
+  group.add(floor); floors.push(floor);
 
-  const left = new THREE.Mesh(wallGeo, neonMat(0x1935ff));
-  left.rotation.y = Math.PI/2;
-  left.position.set(-TRACK_WIDTH/2, WALL_H/2, -i*SEG_LEN);
-  group.add(left);
-  wallsLeft.push(left);
+  const matL = new THREE.MeshStandardMaterial({color:0xffffff, map:wallTex, metalness:0.2, roughness:0.8});
+  const left = new THREE.Mesh(wallGeo, matL);
+  left.rotation.y = Math.PI/2; left.position.set(-TRACK_WIDTH/2, WALL_H/2, -i*SEG_LEN);
+  group.add(left); wallsLeft.push(left);
 
-  const right = new THREE.Mesh(wallGeo, neonMat(0x00e5ff));
-  right.rotation.y = -Math.PI/2;
-  right.position.set(TRACK_WIDTH/2, WALL_H/2, -i*SEG_LEN);
-  group.add(right);
-  wallsRight.push(right);
+  const matR = new THREE.MeshStandardMaterial({color:0xffffff, map:wallTex, metalness:0.2, roughness:0.8});
+  const right = new THREE.Mesh(wallGeo, matR);
+  right.rotation.y = -Math.PI/2; right.position.set(TRACK_WIDTH/2, WALL_H/2, -i*SEG_LEN);
+  group.add(right); wallsRight.push(right);
 
   for(let s=0; s<SEG_LEN; s+=2){
     const strip = new THREE.Mesh(stripGeo, glowLaneMat((s%4===0)?0xff2bd6:0x00e5ff));
-    strip.rotation.x = -Math.PI/2;
-    strip.position.set(0, FLOOR_Y+0.01, -i*SEG_LEN - s);
-    group.add(strip);
-    laneStrips.push(strip);
+    strip.rotation.x = -Math.PI/2; strip.position.set(0, FLOOR_Y+0.01, -i*SEG_LEN - s);
+    group.add(strip); laneStrips.push(strip);
   }
 
-  segments.push(group);
-  scene.add(group);
+  segments.push(group); scene.add(group);
 }
 
-/* ---------- Player car ---------- */
+/* ---------- Car (hover DeLorean vibe) ---------- */
 const car = new THREE.Group();
+// main body
 const body = new THREE.Mesh(
-  new THREE.BoxGeometry(1.1, 0.4, 2),
-  new THREE.MeshStandardMaterial({color:0x0efeff, emissive:0x0efeff, emissiveIntensity:0.4, metalness:0.5, roughness:0.3})
+  new THREE.BoxGeometry(1.6, 0.35, 3.0),
+  new THREE.MeshStandardMaterial({color:0x9aa4ac, metalness:0.8, roughness:0.25})
 );
-body.position.y = 0.35;
-car.add(body);
+body.position.y = 0.45; car.add(body);
+// hood
+const hood = new THREE.Mesh(
+  new THREE.BoxGeometry(1.6, 0.2, 1.1),
+  new THREE.MeshStandardMaterial({color:0x8b949e, metalness:0.8, roughness:0.25})
+);
+hood.position.set(0,0.6,0.9); car.add(hood);
+// windscreen
 const canopy = new THREE.Mesh(
-  new THREE.BoxGeometry(0.7, 0.3, 0.8),
-  new THREE.MeshStandardMaterial({color:0xff2bd6, emissive:0xff2bd6, emissiveIntensity:0.6})
+  new THREE.BoxGeometry(1.2, 0.32, 0.9),
+  new THREE.MeshStandardMaterial({color:0x1b223a, emissive:0x1b223a, emissiveIntensity:0.4, metalness:0.6, roughness:0.2})
 );
-canopy.position.set(0,0.6,-0.1);
-car.add(canopy);
-const barGeo = new THREE.BoxGeometry(0.2,0.2,1.8);
-const leftBar = new THREE.Mesh(barGeo, neonMat(0x00e5ff));
-leftBar.position.set(-0.65,0.25,0);
-const rightBar = new THREE.Mesh(barGeo, neonMat(0x1935ff));
-rightBar.position.set(0.65,0.25,0);
+canopy.position.set(0,0.7,0.2); car.add(canopy);
+// light bars / flux glow
+const barGeo = new THREE.BoxGeometry(0.15,0.15,2.6);
+const leftBar = new THREE.Mesh(barGeo, neonMat(0x00e5ff)); leftBar.position.set(-0.9,0.35,0);
+const rightBar= new THREE.Mesh(barGeo, neonMat(0xff2bd6)); rightBar.position.set( 0.9,0.35,0);
 car.add(leftBar,rightBar);
+// wheels (hover rims)
+const wheelGeo = new THREE.CylinderGeometry(0.45,0.45,0.18,18);
+const wheelMat = new THREE.MeshStandardMaterial({color:0x0c111d, emissive:0x00e5ff, emissiveIntensity:0.25, metalness:0.7, roughness:0.4});
+function wheel(x,z){
+  const w = new THREE.Mesh(wheelGeo, wheelMat);
+  w.rotation.z = Math.PI/2; w.position.set(x,0.3,z);
+  const glow = new THREE.Mesh(new THREE.TorusGeometry(0.45,0.05,12,24), new THREE.MeshBasicMaterial({color:0x00e5ff}));
+  glow.position.set(x,0.3,z);
+  car.add(w,glow);
+}
+wheel(-0.85, 1.0); wheel(0.85, 1.0); wheel(-0.85,-1.0); wheel(0.85,-1.0);
 
 car.position.set(0, 0.2, 4);
 scene.add(car);
 
-/* ---------- Coins, Boosts, Obstacles ---------- */
+/* ---------- Collectibles, Obstacles, Ramps ---------- */
+const coins = [], boosts = [], obstacles = [], speedups = [], ramps = [];
+
 const coinGeo = new THREE.TorusGeometry(0.25, 0.09, 12, 24);
 const coinMat = new THREE.MeshStandardMaterial({color:0xffe066, emissive:0xffcc00, emissiveIntensity:0.7, metalness:0.3, roughness:0.4});
-const coins = [];
 
 const boostGeo = new THREE.BoxGeometry(TRACK_WIDTH*0.7, 0.05, 2);
 const boostMat = new THREE.MeshBasicMaterial({color:0x73ffb2});
-const boosts = [];
 
-const obstacleGeo = new THREE.BoxGeometry(1.4, 1, 1.4);
-const obstacleMat = new THREE.MeshStandardMaterial({color:0xff2bd6, emissive:0xff2bd6, emissiveIntensity:0.6, metalness:0.4, roughness:0.3});
-const obstacles = [];
+const obstacleGeo = new THREE.BoxGeometry(1.8, 1.2, 1.4);
+const obstacleLabelTex = (()=>{
+  const c = document.createElement("canvas"); c.width=512; c.height=256;
+  const g = c.getContext("2d");
+  const grd = g.createLinearGradient(0,0,c.width,0);
+  grd.addColorStop(0,"#0b1026"); grd.addColorStop(1,"#1a2550");
+  g.fillStyle = grd; g.fillRect(0,0,c.width,c.height);
+  g.strokeStyle = "#5bc0ff"; g.lineWidth=8; g.strokeRect(6,6,c.width-12,c.height-12);
+  g.font="bold 34px Inter, Arial"; g.fillStyle="#e7f6ff"; g.textAlign="center"; g.shadowColor="#00e5ff"; g.shadowBlur=16;
+  g.fillText("Mr Samuels – Grade 10 English ™", c.width/2, c.height/2 + 12);
+  const tex = new THREE.CanvasTexture(c); tex.anisotropy=8; return tex;
+})();
+const obstacleMat = new THREE.MeshStandardMaterial({
+  color:0xffffff, metalness:0.3, roughness:0.6, map:obstacleLabelTex, emissive:0x142042, emissiveIntensity:0.35
+});
+
+/* Speed-Up points (chevrons) */
+const speedupGeo = new THREE.ConeGeometry(0.35, 0.9, 16);
+const speedupMat = new THREE.MeshStandardMaterial({color:0x73fffb, emissive:0x00e5ff, emissiveIntensity:0.7, metalness:0.2, roughness:0.3});
+
+/* Ramps (simple prism) */
+function rampMesh(){
+  const shape = new THREE.Shape();
+  shape.moveTo(-1.2,0); shape.lineTo(1.2,0); shape.lineTo(1.2,0.0); shape.lineTo(-1.2,0.0); // base (ignored)
+  const geom = new THREE.BoxGeometry(2.4,0.2,2.6);
+  const mat = new THREE.MeshStandardMaterial({color:0x1935ff, emissive:0x1935ff, emissiveIntensity:0.3, metalness:0.2, roughness:0.6});
+  const ramp = new THREE.Mesh(geom, mat);
+  // visual slope plane on top
+  const slope = new THREE.Mesh(new THREE.BoxGeometry(2.4,0.1,2.6), new THREE.MeshStandardMaterial({color:0x00e5ff, emissive:0x00e5ff, emissiveIntensity:0.5}));
+  slope.position.y = 0.16; slope.rotation.x = -Math.PI*0.12; // ~7deg slope
+  ramp.add(slope);
+  return ramp;
+}
 
 const spawnPoolZ = -SEG_COUNT*SEG_LEN + 10;
-
 function randX(){ return (Math.random()*0.8-0.4) * (TRACK_WIDTH*0.8); }
 function laneX(){ const lanes=[-2.6,0,2.6]; return lanes[Math.floor(Math.random()*lanes.length)]; }
 
@@ -232,34 +292,55 @@ function spawnBoost(z){
 }
 function spawnObstacle(z){
   const m = new THREE.Mesh(obstacleGeo, obstacleMat);
-  m.position.set(laneX(), 0.5, z);
+  m.position.set(laneX(), 0.6, z);
   m.userData.type = "obstacle";
-  // give each obstacle a small side-to-side oscillation
   m.userData.baseX = m.position.x;
   m.userData.phase = Math.random()*Math.PI*2;
-  m.userData.amp = 0.6 + Math.random()*0.7;
+  m.userData.amp = 0.35 + Math.random()*0.35;   // gentler sway
   scene.add(m); obstacles.push(m);
 }
+function spawnSpeedup(z){
+  const m = new THREE.Mesh(speedupGeo, speedupMat);
+  m.position.set(laneX(), 0.5, z);
+  m.rotation.x = Math.PI; // point backward like chevron
+  m.userData.type = "speedup";
+  scene.add(m); speedups.push(m);
+}
+function spawnRamp(z){
+  const m = rampMesh();
+  m.position.set(laneX(), 0.1, z);
+  m.userData.type = "ramp";
+  scene.add(m); ramps.push(m);
+}
 
-/* FEWER COINS: cut to 10 seeds (was ~24) */
-for (let i=0;i<10;i++) spawnCoin(spawnPoolZ + Math.random()*SEG_COUNT*SEG_LEN);
-/* Boosts unchanged (can tweak if you want fewer/faster) */
-for (let i=0;i<8;i++) spawnBoost(spawnPoolZ + Math.random()*SEG_COUNT*SEG_LEN);
-/* New obstacles */
-for (let i=0;i<14;i++) spawnObstacle(spawnPoolZ + Math.random()*SEG_COUNT*SEG_LEN);
+/* Sparse layout */
+for (let i=0;i<6;i++)  spawnCoin(spawnPoolZ + Math.random()*SEG_COUNT*SEG_LEN);
+for (let i=0;i<5;i++)  spawnBoost(spawnPoolZ + Math.random()*SEG_COUNT*SEG_LEN);
+for (let i=0;i<8;i++)  spawnObstacle(spawnPoolZ + Math.random()*SEG_COUNT*SEG_LEN);
+for (let i=0;i<6;i++)  spawnSpeedup(spawnPoolZ + Math.random()*SEG_COUNT*SEG_LEN);
+for (let i=0;i<5;i++)  spawnRamp(spawnPoolZ + Math.random()*SEG_COUNT*SEG_LEN);
 
 /* ---------- Game state ---------- */
 let running = true, pausedForQuiz = false;
 let tPrev = performance.now();
-let speed = 18, targetSpeed = 22, maxSpeed = 32, minSpeed = 6;
+/* Slower baseline speeds */
+let speed = 12, targetSpeed = 14, maxSpeed = 26, minSpeed = 6;
+
 let steer = 0;
 let dist = 0;
 let score = 0;
 let coinsCount = 0;
 let boostTimer = 0;
+let speedupTimer = 0;
 
 let correct = 0;
 let merits = 0;
+
+/* Jump physics */
+let vy = 0;               // vertical velocity
+const baseY = 0.2;        // hover baseline
+const gravity = -9.6;     // m/s^2 (scaled)
+let onGround = true;
 
 const hud = {
   speed: document.getElementById("speed"),
@@ -294,15 +375,15 @@ document.getElementById("brake").addEventListener("pointerdown", ()=>keys["shift
   });
 });
 
-/* ---------- Collision helpers ---------- */
+/* ---------- Helpers ---------- */
 function aabbIntersect(a,b){
   return (Math.abs(a.x-b.x) <= (a.w+b.w)*0.5) && (Math.abs(a.z-b.z) <= (a.d+b.d)*0.5);
 }
-function carAABB(){
-  return {x:car.position.x, z:car.position.z, w:1.3, d:2.0};
-}
+function carAABB(){ return {x:car.position.x, z:car.position.z, w:1.6, d:2.6}; }
+function showToast(msg, ms=900){ toast.textContent = msg; toast.style.display = "block"; setTimeout(()=>toast.style.display="none", ms); }
+function centerFlash(msg, ms=800){ centerMsg.textContent = msg; centerMsg.style.display = "block"; setTimeout(()=>centerMsg.style.display="none", ms); }
 
-/* ---------- Quiz Bank (50 Qs) ---------- */
+/* ---------- Quiz (50 Qs, 10s timer, merits) ---------- */
 const QUIZ = [
   {q:"Who is elected chief at the start?", a:["Jack","Piggy","Ralph","Simon"], c:2},
   {q:"The conch symbolizes…", a:["Violence","Civilization & order","Hunting","Fear"], c:1},
@@ -357,139 +438,62 @@ const QUIZ = [
   {q:"The mask makes Jack feel…", a:["Ashamed","Liberated from shame/self","Sleepy","Older"], c:1},
 ];
 
-/* ---------- Quiz Logic (10s timer) & merits ---------- */
 let quizOrder = [...Array(QUIZ.length).keys()];
-shuffle(quizOrder);
-let quizPtr = 0;
+shuffle(quizOrder); let quizPtr = 0;
 function shuffle(arr){ for(let i=arr.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]]; } }
+function nextQuestionIndex(){ const idx=quizOrder[quizPtr]; quizPtr=(quizPtr+1)%QUIZ.length; if(quizPtr===0) shuffle(quizOrder); return idx; }
 
-let timerId = null;
-const QUESTION_TIME = 10; // seconds
-let tLeft = QUESTION_TIME;
-
-function nextQuestionIndex(){
-  const idx = quizOrder[quizPtr];
-  quizPtr = (quizPtr+1) % QUIZ.length;
-  if(quizPtr===0) shuffle(quizOrder);
-  return idx;
-}
-function showToast(msg, ms=900){
-  toast.textContent = msg;
-  toast.style.display = "block";
-  setTimeout(()=>toast.style.display="none", ms);
-}
-function centerFlash(msg, ms=800){
-  centerMsg.textContent = msg;
-  centerMsg.style.display = "block";
-  setTimeout(()=>centerMsg.style.display="none", ms);
-}
+let timerId=null; const QUESTION_TIME=10; let tLeft=QUESTION_TIME;
 function startTimer(onExpire){
-  clearInterval(timerId);
-  tLeft = QUESTION_TIME;
-  tLeftEl.textContent = tLeft.toString();
-  timerId = setInterval(()=>{
-    tLeft--;
-    tLeftEl.textContent = tLeft.toString();
-    if(tLeft<=0){
-      clearInterval(timerId);
-      onExpire();
-    }
-  }, 1000);
+  clearInterval(timerId); tLeft=QUESTION_TIME; tLeftEl.textContent=tLeft.toString();
+  timerId=setInterval(()=>{ tLeft--; tLeftEl.textContent=tLeft.toString(); if(tLeft<=0){ clearInterval(timerId); onExpire(); } },1000);
 }
-function awardIfMerit(){
-  const target = Math.floor(correct/10);
-  if(target > merits){
-    merits = target;
-    hud.merits.textContent = merits.toString();
-    centerFlash(`🏅 Merit +1 (Total ${merits})`, 1200);
-  }
-}
+function awardIfMerit(){ const target=Math.floor(correct/10); if(target>merits){ merits=target; hud.merits.textContent=merits.toString(); centerFlash(`🏅 Merit +1 (Total ${merits})`, 1200); } }
+
 function askQuestion(){
-  pausedForQuiz = true;
-  overlay.style.display = "flex";
-  answersEl.innerHTML = "";
-
-  const qIdx = nextQuestionIndex();
-  const q = QUIZ[qIdx];
-  qText.textContent = q.q;
-
-  const order = [0,1,2,3]; shuffle(order);
-  const correctIndexInOrder = order.indexOf(q.c);
-
+  pausedForQuiz=true; overlay.style.display="flex"; answersEl.innerHTML="";
+  const q = QUIZ[nextQuestionIndex()]; qText.textContent=q.q;
+  const order=[0,1,2,3]; shuffle(order); const correctIndexInOrder = order.indexOf(q.c);
   order.forEach((optIndex,i)=>{
-    const b = document.createElement("button");
-    b.className = (i===correctIndexInOrder) ? "ok" : "no";
-    b.textContent = q.a[optIndex];
-    b.onclick = ()=>{
-      clearInterval(timerId);
-      const wasCorrect = (i===correctIndexInOrder);
-      if(wasCorrect){
-        correct++;
-        score += 25;
-        hud.correct.textContent = correct.toString();
-        awardIfMerit();
-        centerFlash("✅ Correct! +25", 900);
-      }else{
-        score = Math.max(0, score-5);
-        centerFlash("❌ Not quite", 900);
-      }
-      overlay.style.display = "none";
-      pausedForQuiz = false;
+    const b=document.createElement("button"); b.className=(i===correctIndexInOrder)?"ok":"no"; b.textContent=q.a[optIndex];
+    b.onclick=()=>{ clearInterval(timerId); const ok=(i===correctIndexInOrder);
+      if(ok){ correct++; score+=25; hud.correct.textContent=correct.toString(); awardIfMerit(); centerFlash("✅ Correct! +25", 900); }
+      else{ score=Math.max(0,score-5); centerFlash("❌ Not quite", 900); }
+      overlay.style.display="none"; pausedForQuiz=false;
     };
-    b.oncontextmenu = (e)=>e.preventDefault();
-    answersEl.appendChild(b);
+    b.oncontextmenu=(e)=>e.preventDefault(); answersEl.appendChild(b);
   });
-
-  startTimer(()=>{
-    score = Math.max(0, score-5);
-    centerFlash("⌛ Time’s up!", 900);
-    overlay.style.display = "none";
-    pausedForQuiz = false;
-  });
+  startTimer(()=>{ score=Math.max(0,score-5); centerFlash("⌛ Time’s up!", 900); overlay.style.display="none"; pausedForQuiz=false; });
 }
-document.getElementById("skip").onclick = ()=>{
-  clearInterval(timerId);
-  overlay.style.display = "none";
-  pausedForQuiz = false;
-};
-document.getElementById("resume").onclick = ()=>{
-  clearInterval(timerId);
-  overlay.style.display = "none";
-  pausedForQuiz = false;
-};
 
 /* ---------- Controls / Pause / Restart ---------- */
-document.getElementById("pauseBtn").onclick = ()=>{
-  running = !running;
-  centerFlash(running ? "▶ RESUME" : "II PAUSED", 800);
-};
+document.getElementById("pauseBtn").onclick = ()=>{ running=!running; centerFlash(running?"▶ RESUME":"II PAUSED",800); };
 document.getElementById("restartBtn").onclick = reset;
 
 function reset(){
-  running = true; pausedForQuiz=false; boostTimer = 0;
-  speed = 18; targetSpeed=22; maxSpeed=32; dist=0; score=0; coinsCount=0;
-  correct = 0; merits = 0; hud.correct.textContent = "0"; hud.merits.textContent = "0";
-  car.position.x = 0; car.position.z = 4;
-  coins.forEach(c=>{ c.position.set(randX(), 0.7, -Math.random()*SEG_COUNT*SEG_LEN); });
-  boosts.forEach(b=>{ b.position.set(0, 0.03, -Math.random()*SEG_COUNT*SEG_LEN); });
-  obstacles.forEach(o=>{
-    o.position.set(laneX(), 0.5, -Math.random()*SEG_COUNT*SEG_LEN);
-    o.userData.baseX = o.position.x;
-    o.userData.phase = Math.random()*Math.PI*2;
+  running=true; pausedForQuiz=false; boostTimer=0; speedupTimer=0;
+  speed=12; targetSpeed=14; maxSpeed=26; dist=0; score=0; coinsCount=0;
+  correct=0; merits=0; hud.correct.textContent="0"; hud.merits.textContent="0";
+  vy=0; onGround=true; car.position.set(0,baseY,4);
+  [...coins].forEach(c=>{ c.position.set(randX(), 0.7, -Math.random()*SEG_COUNT*SEG_LEN); });
+  [...boosts].forEach(b=>{ b.position.set(0, 0.03, -Math.random()*SEG_COUNT*SEG_LEN); });
+  [...speedups].forEach(s=>{ s.position.set(laneX(), 0.5, -Math.random()*SEG_COUNT*SEG_LEN); });
+  [...obstacles].forEach(o=>{
+    o.position.set(laneX(), 0.6, -Math.random()*SEG_COUNT*SEG_LEN);
+    o.userData.baseX = o.position.x; o.userData.phase = Math.random()*Math.PI*2;
   });
+  [...ramps].forEach(r=>{ r.position.set(laneX(), 0.1, -Math.random()*SEG_COUNT*SEG_LEN); });
   centerFlash("⟲ RESTART");
 }
 
-/* ---------- Main update loop ---------- */
+/* ---------- Main loop ---------- */
+let hitCooldown=0; // brief invulnerability after an obstacle hit
 function animate(now){
   requestAnimationFrame(animate);
-  const dt = Math.min(0.05, (now - tPrev)/1000); // clamp delta
-  tPrev = now;
+  const dt = Math.min(0.05, (now - tPrev)/1000); tPrev = now;
+  hitCooldown = Math.max(0, hitCooldown - dt);
 
-  if(!running || pausedForQuiz) {
-    renderer.render(scene, camera);
-    return;
-  }
+  if(!running || pausedForQuiz) { renderer.render(scene, camera); return; }
 
   // inputs
   const steerLeft = keys["arrowleft"]||keys["a"];
@@ -501,14 +505,30 @@ function animate(now){
   else if(steerRight && !steerLeft) steer = THREE.MathUtils.damp(steer,  1.0, 8, dt);
   else steer = THREE.MathUtils.damp(steer, 0, 6, dt);
 
-  if(boostKey) targetSpeed = Math.min(maxSpeed, targetSpeed + 8*dt);
-  if(brakeKey) targetSpeed = Math.max(minSpeed, targetSpeed - 18*dt);
+  // speed model (slower baseline + temporary boosts)
+  if(boostKey) targetSpeed = Math.min(maxSpeed, targetSpeed + 6*dt);
+  if(brakeKey) targetSpeed = Math.max(minSpeed, targetSpeed - 15*dt);
   if(boostTimer>0){ targetSpeed = Math.max(targetSpeed, maxSpeed); boostTimer -= dt; }
+  if(speedupTimer>0){ targetSpeed = Math.max(targetSpeed, maxSpeed-2); speedupTimer -= dt; }
   speed = THREE.MathUtils.damp(speed, targetSpeed, 3, dt);
 
-  car.position.x += steer * 6 * dt;
-  car.position.x = THREE.MathUtils.clamp(car.position.x, -TRACK_WIDTH/2+0.7, TRACK_WIDTH/2-0.7);
+  // lateral motion
+  car.position.x += steer * 5 * dt;
+  car.position.x = THREE.MathUtils.clamp(car.position.x, -TRACK_WIDTH/2+0.9, TRACK_WIDTH/2-0.9);
 
+  // jump / gravity
+  if(!onGround){
+    vy += gravity * dt;
+    car.position.y += vy * dt;
+    if(car.position.y <= baseY){
+      car.position.y = baseY; vy = 0; onGround = true;
+    }
+  }else{
+    // light hover wobble
+    const hover = Math.sin(now*0.004)*0.02; car.position.y = baseY + hover;
+  }
+
+  // world scroll
   const moveZ = speed * dt;
   dist += moveZ;
   score = Math.floor(dist) + coinsCount*50 + Math.floor(speed*2);
@@ -517,75 +537,96 @@ function animate(now){
     if(g.position.z > SEG_LEN) g.position.z -= SEG_LEN*SEG_COUNT;
   });
 
-  // move & recycle all scrolling elements
-  const scrollers = [...laneStrips, ...coins, ...boosts, ...wallsLeft, ...wallsRight, ...floors, ...obstacles];
+  // move & recycle
+  const scrollers = [...laneStrips, ...coins, ...boosts, ...wallsLeft, ...wallsRight, ...floors, ...obstacles, ...speedups, ...ramps];
   scrollers.forEach(m=>{
     m.position.z += moveZ;
     if(m.userData && m.userData.type==="obstacle"){
-      // lateral oscillation
       m.position.x = m.userData.baseX + Math.sin(now*0.002 + m.userData.phase)*m.userData.amp;
     }
     if(m.position.z > 10){
-      // recycle behind
       let offset = SEG_LEN*SEG_COUNT;
-      // widen spacing for coins so they feel rarer
-      if(m.userData && m.userData.type==="coin") offset += Math.random()*30; 
+      if(m.userData && m.userData.type==="coin") offset += 50 + Math.random()*40; // sparse coins
+      if(m.userData && m.userData.type==="speedup") offset += 40 + Math.random()*40;
+      if(m.userData && m.userData.type==="ramp") offset += 40 + Math.random()*40;
       m.position.z -= offset;
-      if(m.userData && m.userData.type==="coin"){ m.position.x = randX(); }
-      if(m.userData && m.userData.type==="boost"){ m.position.x = 0; }
-      if(m.userData && m.userData.type==="obstacle"){
+      if(m.userData && (m.userData.type==="coin" || m.userData.type==="speedup" || m.userData.type==="ramp" || m.userData.type==="obstacle")){
         m.position.x = laneX();
-        m.userData.baseX = m.position.x;
-        m.userData.phase = Math.random()*Math.PI*2;
+        if(m.userData.type==="obstacle"){ m.userData.baseX = m.position.x; m.userData.phase = Math.random()*Math.PI*2; }
       }
+      if(m.userData && m.userData.type==="boost"){ m.position.x = 0; }
     }
   });
 
-  // wall collisions
-  const edge = TRACK_WIDTH/2 - 0.8;
+  // walls
+  const edge = TRACK_WIDTH/2 - 1;
   if(Math.abs(car.position.x) > edge){
-    targetSpeed = Math.max(minSpeed, targetSpeed - 10*dt);
+    targetSpeed = Math.max(minSpeed, targetSpeed - 6*dt);
     car.position.x = THREE.MathUtils.clamp(car.position.x, -edge, edge);
-    centerFlash("⚡ WALL HIT – SLOW!", 300);
+    centerFlash("⚡ WALL HIT – SLOW!", 250);
   }
 
   const carBox = carAABB();
 
-  // coin collision -> ask question every coin
+  // coins -> quiz
   coins.forEach(c=>{
     const box = {x:c.position.x, z:c.position.z, w:0.6, d:0.6};
     if(aabbIntersect(carBox, box)){
       coinsCount++; score += 10;
-      c.position.z -= SEG_LEN*SEG_COUNT + Math.random()*30; // extra spread
+      c.position.z -= SEG_LEN*SEG_COUNT + 50 + Math.random()*40;
       c.position.x = randX();
       showToast("🪙 Coin!");
       askQuestion();
     }
   });
 
-  // boosts
+  // boosts (floor bars) -> hard boost
   boosts.forEach(b=>{
     const box = {x:b.position.x, z:b.position.z, w:TRACK_WIDTH*0.7, d:1.8};
     if(aabbIntersect(carBox, box)){
-      boostTimer = 3.0;
-      maxSpeed = 40;
-      targetSpeed = Math.max(targetSpeed, 36);
+      boostTimer = 2.5; maxSpeed = 32;    // short high boost
+      targetSpeed = Math.max(targetSpeed, 28);
       centerFlash("🚀 BOOST +", 650);
       b.position.z -= SEG_LEN*SEG_COUNT;
     }
   });
 
-  // obstacles — slow down and dock score
-  obstacles.forEach(o=>{
-    const box = {x:o.position.x, z:o.position.z, w:1.4, d:1.4};
+  // speed-up points (chevrons) -> gentler sustained boost
+  speedups.forEach(s=>{
+    const box = {x:s.position.x, z:s.position.z, w:0.8, d:0.9};
     if(aabbIntersect(carBox, box)){
-      targetSpeed = Math.max(minSpeed, targetSpeed - 16*dt - 6); // strong slow
-      score = Math.max(0, score - 8);
-      centerFlash("🛑 OBSTACLE!", 500);
-      // knock it back a bit so we don't keep colliding this frame
-      o.position.z -= 6;
+      speedupTimer = 4.0;                 // longer mild boost
+      maxSpeed = Math.max(maxSpeed, 28);
+      targetSpeed = Math.max(targetSpeed, 24);
+      centerFlash("➤ Speed Up", 650);
+      s.position.z -= SEG_LEN*SEG_COUNT + 40 + Math.random()*40;
+      s.position.x = laneX();
     }
   });
+
+  // ramps -> jump
+  ramps.forEach(r=>{
+    const box = {x:r.position.x, z:r.position.z, w:2.4, d:2.6};
+    if(onGround && aabbIntersect(carBox, box)){
+      vy = 5.5; onGround = false;         // take off
+      centerFlash("⤴ Jump!", 500);
+      r.position.z -= SEG_LEN*SEG_COUNT + 40 + Math.random()*40;
+      r.position.x = laneX();
+    }
+  });
+
+  // obstacles – gentle penalty + cooldown
+  if(onGround){ // only if on ground
+    obstacles.forEach(o=>{
+      const box = {x:o.position.x, z:o.position.z, w:1.8, d:1.4};
+      if(hitCooldown<=0 && aabbIntersect(carBox, box)){
+        targetSpeed = Math.max(minSpeed, targetSpeed - 3.5); // mild hit
+        score = Math.max(0, score - 5);
+        centerFlash("🛑 Mr Samuels says: Watch it!", 650);
+        o.position.z -= 8; hitCooldown = 0.8;
+      }
+    });
+  }
 
   // camera follow
   camera.position.x = THREE.MathUtils.damp(camera.position.x, car.position.x * 0.45, 3, dt);
