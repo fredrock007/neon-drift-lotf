@@ -37,7 +37,6 @@
     position:fixed; left:50%; top:14%; transform:translateX(-50%); font-weight:900; letter-spacing:.5px;
     background:rgba(14,18,32,.6); border:1px solid #243056; border-radius:12px; padding:8px 12px; display:none
   }
-  /* mobile controls */
   #pad{
     position:fixed; right:14px; bottom:14px; display:grid; grid-template-columns:68px 68px; gap:10px;
     opacity:.95; user-select:none
@@ -48,7 +47,6 @@
   }
   .ctl:active{transform:scale(.98); border-color:var(--accent)}
   @media (min-width:880px){ #pad{display:none} }
-  /* small toast */
   #toast{
     position:fixed; bottom:14px; left:50%; transform:translateX(-50%); background:#091022; color:#a8eaff;
     border:1px solid #1d2a52; border-radius:12px; padding:8px 12px; display:none
@@ -76,7 +74,7 @@
   <div class="card">
     <div class="meta">
       <h2 style="margin:0">Quiz: <em>Lord of the Flies</em></h2>
-      <div class="timer">⏱️ <span id="tLeft">15</span>s</div>
+      <div class="timer">⏱️ <span id="tLeft">10</span>s</div>
     </div>
     <div id="qText" style="margin-top:6px">Question here…</div>
     <div class="answers" id="answers"></div>
@@ -201,7 +199,7 @@ car.add(leftBar,rightBar);
 car.position.set(0, 0.2, 4);
 scene.add(car);
 
-/* ---------- Coins & Boosts ---------- */
+/* ---------- Coins, Boosts, Obstacles ---------- */
 const coinGeo = new THREE.TorusGeometry(0.25, 0.09, 12, 24);
 const coinMat = new THREE.MeshStandardMaterial({color:0xffe066, emissive:0xffcc00, emissiveIntensity:0.7, metalness:0.3, roughness:0.4});
 const coins = [];
@@ -210,9 +208,14 @@ const boostGeo = new THREE.BoxGeometry(TRACK_WIDTH*0.7, 0.05, 2);
 const boostMat = new THREE.MeshBasicMaterial({color:0x73ffb2});
 const boosts = [];
 
+const obstacleGeo = new THREE.BoxGeometry(1.4, 1, 1.4);
+const obstacleMat = new THREE.MeshStandardMaterial({color:0xff2bd6, emissive:0xff2bd6, emissiveIntensity:0.6, metalness:0.4, roughness:0.3});
+const obstacles = [];
+
 const spawnPoolZ = -SEG_COUNT*SEG_LEN + 10;
 
 function randX(){ return (Math.random()*0.8-0.4) * (TRACK_WIDTH*0.8); }
+function laneX(){ const lanes=[-2.6,0,2.6]; return lanes[Math.floor(Math.random()*lanes.length)]; }
 
 function spawnCoin(z){
   const m = new THREE.Mesh(coinGeo, coinMat);
@@ -227,8 +230,23 @@ function spawnBoost(z){
   m.userData.type = "boost";
   scene.add(m); boosts.push(m);
 }
-for (let i=0;i<24;i++) spawnCoin(spawnPoolZ + Math.random()*SEG_COUNT*SEG_LEN);
+function spawnObstacle(z){
+  const m = new THREE.Mesh(obstacleGeo, obstacleMat);
+  m.position.set(laneX(), 0.5, z);
+  m.userData.type = "obstacle";
+  // give each obstacle a small side-to-side oscillation
+  m.userData.baseX = m.position.x;
+  m.userData.phase = Math.random()*Math.PI*2;
+  m.userData.amp = 0.6 + Math.random()*0.7;
+  scene.add(m); obstacles.push(m);
+}
+
+/* FEWER COINS: cut to 10 seeds (was ~24) */
+for (let i=0;i<10;i++) spawnCoin(spawnPoolZ + Math.random()*SEG_COUNT*SEG_LEN);
+/* Boosts unchanged (can tweak if you want fewer/faster) */
 for (let i=0;i<8;i++) spawnBoost(spawnPoolZ + Math.random()*SEG_COUNT*SEG_LEN);
+/* New obstacles */
+for (let i=0;i<14;i++) spawnObstacle(spawnPoolZ + Math.random()*SEG_COUNT*SEG_LEN);
 
 /* ---------- Game state ---------- */
 let running = true, pausedForQuiz = false;
@@ -276,7 +294,7 @@ document.getElementById("brake").addEventListener("pointerdown", ()=>keys["shift
   });
 });
 
-/* ---------- Simple collision helpers ---------- */
+/* ---------- Collision helpers ---------- */
 function aabbIntersect(a,b){
   return (Math.abs(a.x-b.x) <= (a.w+b.w)*0.5) && (Math.abs(a.z-b.z) <= (a.d+b.d)*0.5);
 }
@@ -339,20 +357,20 @@ const QUIZ = [
   {q:"The mask makes Jack feel…", a:["Ashamed","Liberated from shame/self","Sleepy","Older"], c:1},
 ];
 
-/* ---------- Quiz Logic with timer & merits ---------- */
+/* ---------- Quiz Logic (10s timer) & merits ---------- */
 let quizOrder = [...Array(QUIZ.length).keys()];
 shuffle(quizOrder);
 let quizPtr = 0;
 function shuffle(arr){ for(let i=arr.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]]; } }
 
 let timerId = null;
-const QUESTION_TIME = 15; // seconds
+const QUESTION_TIME = 10; // seconds
 let tLeft = QUESTION_TIME;
 
 function nextQuestionIndex(){
   const idx = quizOrder[quizPtr];
   quizPtr = (quizPtr+1) % QUIZ.length;
-  if(quizPtr===0) shuffle(quizOrder); // reshuffle each cycle
+  if(quizPtr===0) shuffle(quizOrder);
   return idx;
 }
 function showToast(msg, ms=900){
@@ -395,7 +413,6 @@ function askQuestion(){
   const q = QUIZ[qIdx];
   qText.textContent = q.q;
 
-  // randomized answer order per question
   const order = [0,1,2,3]; shuffle(order);
   const correctIndexInOrder = order.indexOf(q.c);
 
@@ -424,7 +441,6 @@ function askQuestion(){
   });
 
   startTimer(()=>{
-    // time expired = wrong
     score = Math.max(0, score-5);
     centerFlash("⌛ Time’s up!", 900);
     overlay.style.display = "none";
@@ -456,6 +472,11 @@ function reset(){
   car.position.x = 0; car.position.z = 4;
   coins.forEach(c=>{ c.position.set(randX(), 0.7, -Math.random()*SEG_COUNT*SEG_LEN); });
   boosts.forEach(b=>{ b.position.set(0, 0.03, -Math.random()*SEG_COUNT*SEG_LEN); });
+  obstacles.forEach(o=>{
+    o.position.set(laneX(), 0.5, -Math.random()*SEG_COUNT*SEG_LEN);
+    o.userData.baseX = o.position.x;
+    o.userData.phase = Math.random()*Math.PI*2;
+  });
   centerFlash("⟲ RESTART");
 }
 
@@ -495,11 +516,28 @@ function animate(now){
     g.position.z += moveZ;
     if(g.position.z > SEG_LEN) g.position.z -= SEG_LEN*SEG_COUNT;
   });
-  [...laneStrips, ...coins, ...boosts, ...wallsLeft, ...wallsRight, ...floors].forEach(m=>{
+
+  // move & recycle all scrolling elements
+  const scrollers = [...laneStrips, ...coins, ...boosts, ...wallsLeft, ...wallsRight, ...floors, ...obstacles];
+  scrollers.forEach(m=>{
     m.position.z += moveZ;
+    if(m.userData && m.userData.type==="obstacle"){
+      // lateral oscillation
+      m.position.x = m.userData.baseX + Math.sin(now*0.002 + m.userData.phase)*m.userData.amp;
+    }
     if(m.position.z > 10){
-      m.position.z -= SEG_LEN*SEG_COUNT;
-      if(m.userData.type==="coin"){ m.position.x = randX(); }
+      // recycle behind
+      let offset = SEG_LEN*SEG_COUNT;
+      // widen spacing for coins so they feel rarer
+      if(m.userData && m.userData.type==="coin") offset += Math.random()*30; 
+      m.position.z -= offset;
+      if(m.userData && m.userData.type==="coin"){ m.position.x = randX(); }
+      if(m.userData && m.userData.type==="boost"){ m.position.x = 0; }
+      if(m.userData && m.userData.type==="obstacle"){
+        m.position.x = laneX();
+        m.userData.baseX = m.position.x;
+        m.userData.phase = Math.random()*Math.PI*2;
+      }
     }
   });
 
@@ -511,13 +549,14 @@ function animate(now){
     centerFlash("⚡ WALL HIT – SLOW!", 300);
   }
 
-  // coin collision -> ask question every coin
   const carBox = carAABB();
+
+  // coin collision -> ask question every coin
   coins.forEach(c=>{
     const box = {x:c.position.x, z:c.position.z, w:0.6, d:0.6};
     if(aabbIntersect(carBox, box)){
       coinsCount++; score += 10;
-      c.position.z -= SEG_LEN*SEG_COUNT;
+      c.position.z -= SEG_LEN*SEG_COUNT + Math.random()*30; // extra spread
       c.position.x = randX();
       showToast("🪙 Coin!");
       askQuestion();
@@ -533,6 +572,18 @@ function animate(now){
       targetSpeed = Math.max(targetSpeed, 36);
       centerFlash("🚀 BOOST +", 650);
       b.position.z -= SEG_LEN*SEG_COUNT;
+    }
+  });
+
+  // obstacles — slow down and dock score
+  obstacles.forEach(o=>{
+    const box = {x:o.position.x, z:o.position.z, w:1.4, d:1.4};
+    if(aabbIntersect(carBox, box)){
+      targetSpeed = Math.max(minSpeed, targetSpeed - 16*dt - 6); // strong slow
+      score = Math.max(0, score - 8);
+      centerFlash("🛑 OBSTACLE!", 500);
+      // knock it back a bit so we don't keep colliding this frame
+      o.position.z -= 6;
     }
   });
 
