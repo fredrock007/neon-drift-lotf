@@ -18,11 +18,11 @@
   .stat{font-weight:700}
   .btn{pointer-events:auto; background:var(--accent); border:none; color:#001018; font-weight:900; padding:10px 14px; border-radius:12px; cursor:pointer}
   .btn.ghost{background:transparent;border:2px solid var(--accent);color:var(--text)}
-  #overlay{
+  #overlay, #review{
     position:fixed; inset:0; display:none; align-items:center; justify-content:center;
     background:rgba(0,0,0,.65); backdrop-filter: blur(4px); z-index:20;
   }
-  .card{width:min(720px,92vw); background:var(--panel); border:1px solid #26345e; border-radius:16px; padding:16px; box-shadow:0 20px 60px rgba(0,0,0,.45)}
+  .card{width:min(900px,92vw); max-height:84vh; overflow:auto; background:var(--panel); border:1px solid #26345e; border-radius:16px; padding:16px; box-shadow:0 20px 60px rgba(0,0,0,.45)}
   .meta{display:flex;gap:10px;align-items:center;opacity:.9}
   .timer{margin-left:auto;font-weight:900}
   .answers{display:grid; gap:10px; margin-top:10px}
@@ -48,10 +48,15 @@
     position:fixed; bottom:14px; left:50%; transform:translateX(-50%); background:#091022; color:#a8eaff;
     border:1px solid #1d2a52; border-radius:12px; padding:8px 12px; display:none; z-index:15;
   }
+  .qrow{border:1px solid #2a3b6a;border-radius:12px;padding:10px;margin:8px 0;background:#0b1428}
+  .qrow b{color:#bde3ff}
+  .correctTag{font-weight:700;color:#22c55e;margin-left:6px}
+  .wrongTag{font-weight:700;color:#ef4444;margin-left:6px}
 </style>
 </head>
 <body>
 <div id="ui">
+  <div class="pill"><span>Time:</span> <span class="stat" id="time">05:00</span></div>
   <div class="pill"><span>Speed:</span> <span class="stat" id="speed">0</span></div>
   <div class="pill"><span>Coins:</span> <span class="stat" id="coins">0</span></div>
   <div class="pill"><span>Distance:</span> <span class="stat" id="dist">0</span> m</div>
@@ -77,6 +82,21 @@
     <div style="display:flex;gap:8px;margin-top:10px">
       <button class="btn ghost" id="skip">Skip</button>
       <button class="btn" id="resume">Resume</button>
+    </div>
+  </div>
+</div>
+
+<!-- Review Overlay (end of 5 minutes) -->
+<div id="review">
+  <div class="card">
+    <div class="meta" style="margin-bottom:10px">
+      <h2 style="margin:0">Session Review (5 minutes)</h2>
+      <div style="margin-left:auto;font-weight:900">Merits: <span id="finalMerits">0</span></div>
+    </div>
+    <div id="reviewList"></div>
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button class="btn" id="playAgain">Play Again</button>
+      <button class="btn ghost" id="closeReview">Close</button>
     </div>
   </div>
 </div>
@@ -127,35 +147,37 @@ const neonMat = (c)=> new THREE.MeshStandardMaterial({
 const darkMat = new THREE.MeshStandardMaterial({color:0x0b0f1c, metalness:0.2, roughness:0.9});
 const glowLaneMat = (c)=> new THREE.MeshBasicMaterial({color:c});
 
-/* Graffiti canvas texture: "Mr Samuels" */
-function makeGraffitiTexture(text="Mr Samuels"){
+/* Blood-red graffiti texture: "Mr Samuels ENG HL Grade 10 TM" */
+function makeGraffitiTexture(text="Mr Samuels ENG HL Grade 10 TM"){
   const c = document.createElement("canvas");
   c.width = 1024; c.height = 256;
   const g = c.getContext("2d");
-  // brick-ish dark wall
+  // dark wall with bricks
   g.fillStyle = "#0b1020"; g.fillRect(0,0,c.width,c.height);
   g.fillStyle = "#0e1428";
   for(let x=0;x<c.width;x+=48){ for(let y=0;y<c.height;y+=24){ g.fillRect(x + (y%48?0:24), y, 44, 20); } }
-  // spray shadow
-  g.font = "900 120px Impact, Arial Black, sans-serif";
-  g.fillStyle = "#001d2d"; g.shadowColor="#00e5ff"; g.shadowBlur=24;
-  g.textAlign="center"; g.translate(c.width/2, c.height/2 + 35); g.rotate(-0.03);
+  // spray red style
+  g.font = "900 118px Impact, Arial Black, sans-serif";
+  g.textAlign="center";
+  g.translate(c.width/2, c.height/2 + 35);
+  g.rotate(-0.035);
+  // dark shadow
+  g.fillStyle = "#2b0004"; g.shadowColor="#ff2b2b"; g.shadowBlur=26;
   g.fillText(text, 0, 0);
-  // bright outline
-  g.shadowBlur=0; g.lineWidth=10; g.strokeStyle="#ff2bd6";
+  // thick outline
+  g.shadowBlur = 0; g.lineWidth = 12; g.strokeStyle = "#7a0000";
   g.strokeText(text, 0, 0);
-  // fill with neon gradient
+  // blood red fill
   const grd = g.createLinearGradient(-300,0,300,0);
-  grd.addColorStop(0,"#00e5ff"); grd.addColorStop(1,"#8b5cf6");
-  g.fillStyle = grd;
-  g.fillText(text, 0, 0);
+  grd.addColorStop(0,"#b00020"); grd.addColorStop(1,"#ff2b2b");
+  g.fillStyle = grd; g.fillText(text, 0, 0);
   const tex = new THREE.CanvasTexture(c);
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(2,1); // repeat along the long wall
+  tex.repeat.set(2,1);
   tex.anisotropy = 8;
   return tex;
 }
-const wallTex = makeGraffitiTexture("Mr Samuels");
+const wallTex = makeGraffitiTexture();
 
 /* Build segments */
 const segments = [], wallsLeft=[], wallsRight=[], floors=[], laneStrips=[];
@@ -230,7 +252,7 @@ wheel(-0.85, 1.0); wheel(0.85, 1.0); wheel(-0.85,-1.0); wheel(0.85,-1.0);
 car.position.set(0, 0.2, 4);
 scene.add(car);
 
-/* ---------- Collectibles, Obstacles, Ramps ---------- */
+/* ---------- Collectibles, Obstacles, Speedups, Ramps ---------- */
 const coins = [], boosts = [], obstacles = [], speedups = [], ramps = [];
 
 const coinGeo = new THREE.TorusGeometry(0.25, 0.09, 12, 24);
@@ -259,16 +281,13 @@ const obstacleMat = new THREE.MeshStandardMaterial({
 const speedupGeo = new THREE.ConeGeometry(0.35, 0.9, 16);
 const speedupMat = new THREE.MeshStandardMaterial({color:0x73fffb, emissive:0x00e5ff, emissiveIntensity:0.7, metalness:0.2, roughness:0.3});
 
-/* Ramps (simple prism) */
+/* Ramps (simple prism block + sloped top) */
 function rampMesh(){
-  const shape = new THREE.Shape();
-  shape.moveTo(-1.2,0); shape.lineTo(1.2,0); shape.lineTo(1.2,0.0); shape.lineTo(-1.2,0.0); // base (ignored)
   const geom = new THREE.BoxGeometry(2.4,0.2,2.6);
   const mat = new THREE.MeshStandardMaterial({color:0x1935ff, emissive:0x1935ff, emissiveIntensity:0.3, metalness:0.2, roughness:0.6});
   const ramp = new THREE.Mesh(geom, mat);
-  // visual slope plane on top
   const slope = new THREE.Mesh(new THREE.BoxGeometry(2.4,0.1,2.6), new THREE.MeshStandardMaterial({color:0x00e5ff, emissive:0x00e5ff, emissiveIntensity:0.5}));
-  slope.position.y = 0.16; slope.rotation.x = -Math.PI*0.12; // ~7deg slope
+  slope.position.y = 0.16; slope.rotation.x = -Math.PI*0.12;
   ramp.add(slope);
   return ramp;
 }
@@ -302,7 +321,7 @@ function spawnObstacle(z){
 function spawnSpeedup(z){
   const m = new THREE.Mesh(speedupGeo, speedupMat);
   m.position.set(laneX(), 0.5, z);
-  m.rotation.x = Math.PI; // point backward like chevron
+  m.rotation.x = Math.PI; // arrow backward
   m.userData.type = "speedup";
   scene.add(m); speedups.push(m);
 }
@@ -336,13 +355,21 @@ let speedupTimer = 0;
 let correct = 0;
 let merits = 0;
 
+/* Session timer: 5 minutes (300s) */
+const SESSION_DURATION = 300;
+let sessionLeft = SESSION_DURATION; // seconds
+
 /* Jump physics */
 let vy = 0;               // vertical velocity
 const baseY = 0.2;        // hover baseline
 const gravity = -9.6;     // m/s^2 (scaled)
 let onGround = true;
 
+/* Quiz tracking for review */
+const askedLog = []; // {q, a[], correctIndex, chosenIndex, result:"correct"|"wrong"|"timeout"}
+
 const hud = {
+  time: document.getElementById("time"),
   speed: document.getElementById("speed"),
   coins: document.getElementById("coins"),
   dist:  document.getElementById("dist"),
@@ -356,6 +383,9 @@ const answersEl = document.getElementById("answers");
 const tLeftEl = document.getElementById("tLeft");
 const centerMsg = document.getElementById("centerMsg");
 const toast = document.getElementById("toast");
+const review = document.getElementById("review");
+const reviewList = document.getElementById("reviewList");
+const finalMerits = document.getElementById("finalMerits");
 
 /* ---------- Input ---------- */
 const keys = {};
@@ -382,6 +412,7 @@ function aabbIntersect(a,b){
 function carAABB(){ return {x:car.position.x, z:car.position.z, w:1.6, d:2.6}; }
 function showToast(msg, ms=900){ toast.textContent = msg; toast.style.display = "block"; setTimeout(()=>toast.style.display="none", ms); }
 function centerFlash(msg, ms=800){ centerMsg.textContent = msg; centerMsg.style.display = "block"; setTimeout(()=>centerMsg.style.display="none", ms); }
+function fmtTime(s){ s=Math.max(0,Math.floor(s)); const m=String(Math.floor(s/60)).padStart(2,"0"); const sec=String(s%60).padStart(2,"0"); return `${m}:${sec}`; }
 
 /* ---------- Quiz (50 Qs, 10s timer, merits) ---------- */
 const QUIZ = [
@@ -438,8 +469,8 @@ const QUIZ = [
   {q:"The mask makes Jack feel…", a:["Ashamed","Liberated from shame/self","Sleepy","Older"], c:1},
 ];
 
-let quizOrder = [...Array(QUIZ.length).keys()];
-shuffle(quizOrder); let quizPtr = 0;
+let quizOrder=[], quizPtr=0;
+function seedQuizOrder(){ quizOrder = [...Array(QUIZ.length).keys()]; shuffle(quizOrder); quizPtr=0; }
 function shuffle(arr){ for(let i=arr.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]]; } }
 function nextQuestionIndex(){ const idx=quizOrder[quizPtr]; quizPtr=(quizPtr+1)%QUIZ.length; if(quizPtr===0) shuffle(quizOrder); return idx; }
 
@@ -452,29 +483,76 @@ function awardIfMerit(){ const target=Math.floor(correct/10); if(target>merits){
 
 function askQuestion(){
   pausedForQuiz=true; overlay.style.display="flex"; answersEl.innerHTML="";
-  const q = QUIZ[nextQuestionIndex()]; qText.textContent=q.q;
+  const idx = nextQuestionIndex();
+  const q = QUIZ[idx]; qText.textContent=q.q;
+
   const order=[0,1,2,3]; shuffle(order); const correctIndexInOrder = order.indexOf(q.c);
+
   order.forEach((optIndex,i)=>{
     const b=document.createElement("button"); b.className=(i===correctIndexInOrder)?"ok":"no"; b.textContent=q.a[optIndex];
-    b.onclick=()=>{ clearInterval(timerId); const ok=(i===correctIndexInOrder);
+    b.onclick=()=>{ clearInterval(timerId);
+      const ok=(i===correctIndexInOrder);
+      askedLog.push({q:q.q, a:q.a, correctIndex:q.c, chosenIndex:optIndex, result: ok?"correct":"wrong"});
       if(ok){ correct++; score+=25; hud.correct.textContent=correct.toString(); awardIfMerit(); centerFlash("✅ Correct! +25", 900); }
       else{ score=Math.max(0,score-5); centerFlash("❌ Not quite", 900); }
       overlay.style.display="none"; pausedForQuiz=false;
     };
     b.oncontextmenu=(e)=>e.preventDefault(); answersEl.appendChild(b);
   });
-  startTimer(()=>{ score=Math.max(0,score-5); centerFlash("⌛ Time’s up!", 900); overlay.style.display="none"; pausedForQuiz=false; });
+
+  startTimer(()=>{
+    askedLog.push({q:q.q, a:q.a, correctIndex:q.c, chosenIndex:null, result:"timeout"});
+    score=Math.max(0,score-5); centerFlash("⌛ Time’s up!", 900); overlay.style.display="none"; pausedForQuiz=false;
+  });
 }
+document.getElementById("skip").onclick = ()=>{
+  clearInterval(timerId);
+  overlay.style.display = "none";
+  pausedForQuiz = false;
+};
+document.getElementById("resume").onclick = ()=>{
+  clearInterval(timerId);
+  overlay.style.display = "none";
+  pausedForQuiz = false;
+};
 
 /* ---------- Controls / Pause / Restart ---------- */
 document.getElementById("pauseBtn").onclick = ()=>{ running=!running; centerFlash(running?"▶ RESUME":"II PAUSED",800); };
 document.getElementById("restartBtn").onclick = reset;
+document.getElementById("playAgain").onclick = ()=>{ review.style.display="none"; reset(); };
+document.getElementById("closeReview").onclick = ()=>{ review.style.display="none"; };
 
+/* ---------- End of session review ---------- */
+function showReview(){
+  finalMerits.textContent = merits.toString();
+  reviewList.innerHTML = "";
+  if(askedLog.length===0){
+    const d=document.createElement("div"); d.textContent="No questions were asked this session."; reviewList.appendChild(d);
+  }else{
+    askedLog.forEach((item, i)=>{
+      const row = document.createElement("div"); row.className="qrow";
+      const correctAns = item.a[item.correctIndex];
+      const tag = item.result==="correct" ? `<span class="correctTag">✓ Correct</span>` :
+                 item.result==="wrong"   ? `<span class="wrongTag">✗ Wrong</span>` :
+                                           `<span class="wrongTag">⌛ Time</span>`;
+      row.innerHTML = `<div><b>Q${i+1}.</b> ${item.q} ${tag}</div>
+                       <div>Correct answer: <b>${correctAns}</b></div>`;
+      reviewList.appendChild(row);
+    });
+  }
+  review.style.display = "flex";
+}
+
+/* ---------- Reset ---------- */
 function reset(){
   running=true; pausedForQuiz=false; boostTimer=0; speedupTimer=0;
   speed=12; targetSpeed=14; maxSpeed=26; dist=0; score=0; coinsCount=0;
   correct=0; merits=0; hud.correct.textContent="0"; hud.merits.textContent="0";
   vy=0; onGround=true; car.position.set(0,baseY,4);
+  sessionLeft = SESSION_DURATION; hud.time.textContent = fmtTime(sessionLeft);
+  askedLog.length = 0;
+  seedQuizOrder();
+
   [...coins].forEach(c=>{ c.position.set(randX(), 0.7, -Math.random()*SEG_COUNT*SEG_LEN); });
   [...boosts].forEach(b=>{ b.position.set(0, 0.03, -Math.random()*SEG_COUNT*SEG_LEN); });
   [...speedups].forEach(s=>{ s.position.set(laneX(), 0.5, -Math.random()*SEG_COUNT*SEG_LEN); });
@@ -488,10 +566,23 @@ function reset(){
 
 /* ---------- Main loop ---------- */
 let hitCooldown=0; // brief invulnerability after an obstacle hit
+let tPrevAnim = performance.now();
 function animate(now){
   requestAnimationFrame(animate);
   const dt = Math.min(0.05, (now - tPrev)/1000); tPrev = now;
   hitCooldown = Math.max(0, hitCooldown - dt);
+
+  if(running && !pausedForQuiz){
+    sessionLeft -= dt;
+    if(sessionLeft <= 0){
+      sessionLeft = 0;
+      running = false;
+      hud.time.textContent = fmtTime(0);
+      showReview();
+    } else {
+      hud.time.textContent = fmtTime(sessionLeft);
+    }
+  }
 
   if(!running || pausedForQuiz) { renderer.render(scene, camera); return; }
 
@@ -524,7 +615,6 @@ function animate(now){
       car.position.y = baseY; vy = 0; onGround = true;
     }
   }else{
-    // light hover wobble
     const hover = Math.sin(now*0.004)*0.02; car.position.y = baseY + hover;
   }
 
@@ -584,18 +674,18 @@ function animate(now){
   boosts.forEach(b=>{
     const box = {x:b.position.x, z:b.position.z, w:TRACK_WIDTH*0.7, d:1.8};
     if(aabbIntersect(carBox, box)){
-      boostTimer = 2.5; maxSpeed = 32;    // short high boost
+      boostTimer = 2.5; maxSpeed = 32;
       targetSpeed = Math.max(targetSpeed, 28);
       centerFlash("🚀 BOOST +", 650);
       b.position.z -= SEG_LEN*SEG_COUNT;
     }
   });
 
-  // speed-up points (chevrons) -> gentler sustained boost
+  // speed-up points (chevrons)
   speedups.forEach(s=>{
     const box = {x:s.position.x, z:s.position.z, w:0.8, d:0.9};
     if(aabbIntersect(carBox, box)){
-      speedupTimer = 4.0;                 // longer mild boost
+      speedupTimer = 4.0;
       maxSpeed = Math.max(maxSpeed, 28);
       targetSpeed = Math.max(targetSpeed, 24);
       centerFlash("➤ Speed Up", 650);
@@ -608,19 +698,19 @@ function animate(now){
   ramps.forEach(r=>{
     const box = {x:r.position.x, z:r.position.z, w:2.4, d:2.6};
     if(onGround && aabbIntersect(carBox, box)){
-      vy = 5.5; onGround = false;         // take off
+      vy = 5.5; onGround = false;
       centerFlash("⤴ Jump!", 500);
       r.position.z -= SEG_LEN*SEG_COUNT + 40 + Math.random()*40;
       r.position.x = laneX();
     }
   });
 
-  // obstacles – gentle penalty + cooldown
-  if(onGround){ // only if on ground
+  // obstacles – gentle penalty + cooldown (only on ground)
+  if(onGround){
     obstacles.forEach(o=>{
       const box = {x:o.position.x, z:o.position.z, w:1.8, d:1.4};
       if(hitCooldown<=0 && aabbIntersect(carBox, box)){
-        targetSpeed = Math.max(minSpeed, targetSpeed - 3.5); // mild hit
+        targetSpeed = Math.max(minSpeed, targetSpeed - 3.5);
         score = Math.max(0, score - 5);
         centerFlash("🛑 Mr Samuels says: Watch it!", 650);
         o.position.z -= 8; hitCooldown = 0.8;
