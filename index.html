@@ -2,45 +2,45 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
 <title>Neon Drift: LOTF Racer + Quiz</title>
 <style>
   :root{
-    --bg:#05060a; --panel:#0e1220; --accent:#00e5ff; --accent2:#ff2bd6; --text:#e7f6ff; --good:#22c55e; --bad:#ef4444;
+    --bg:#04060c; --panel:#0e1220; --accent:#00e5ff; --accent2:#ff2bd6; --accent3:#73ffb2; --text:#e7f6ff; --good:#22c55e; --bad:#ef4444;
   }
   html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial}
   #ui{
-    position:fixed; inset:0 0 auto 0; display:flex; gap:12px; align-items:center; padding:10px 12px;
+    position:fixed; inset:0 0 auto 0; display:flex; gap:10px; align-items:center; padding:10px 12px;
     background:linear-gradient(to bottom,rgba(0,0,0,.55),rgba(0,0,0,0));
     user-select:none; -webkit-user-select:none; pointer-events:none; z-index:10;
   }
-  .pill{pointer-events:auto; background:rgba(14,18,32,.6); border:1px solid #243056; border-radius:12px; padding:8px 10px; display:flex; gap:10px; align-items:center}
-  .stat{font-weight:700}
+  .pill{pointer-events:auto; background:rgba(14,18,32,.7); border:1px solid #243056; border-radius:12px; padding:8px 10px; display:flex; gap:8px; align-items:center}
+  .stat{font-weight:800; letter-spacing:.3px}
   .btn{pointer-events:auto; background:var(--accent); border:none; color:#001018; font-weight:900; padding:10px 14px; border-radius:12px; cursor:pointer}
   .btn.ghost{background:transparent;border:2px solid var(--accent);color:var(--text)}
-  #overlay, #review{
+  #overlay, #review, #tunnelOverlay{
     position:fixed; inset:0; display:none; align-items:center; justify-content:center;
     background:rgba(0,0,0,.65); backdrop-filter: blur(4px); z-index:20;
   }
-  .card{width:min(900px,92vw); max-height:84vh; overflow:auto; background:var(--panel); border:1px solid #26345e; border-radius:16px; padding:16px; box-shadow:0 20px 60px rgba(0,0,0,.45)}
+  .card{width:min(980px,94vw); max-height:84vh; overflow:auto; background:var(--panel); border:1px solid #26345e; border-radius:16px; padding:16px; box-shadow:0 20px 60px rgba(0,0,0,.45)}
   .meta{display:flex;gap:10px;align-items:center;opacity:.9}
   .timer{margin-left:auto;font-weight:900}
   .answers{display:grid; gap:10px; margin-top:10px}
-  .answers button{border:none;border-radius:12px; padding:12px; font-weight:700; cursor:pointer}
-  .answers button:hover{filter:brightness(1.08)}
-  /* NEUTRAL option style (no reveal during quiz) */
-  .choice{background:rgba(14,18,32,.6); border:2px solid #243056; color:#e7f6ff}
+  .answers button{border:none;border-radius:12px; padding:14px; font-weight:800; cursor:pointer}
+  /* NEUTRAL options (no reveal during play) */
+  .choice{background:rgba(14,18,32,.7); border:2px solid #2a3b6a; color:#e7f6ff}
+  .choice:active{transform:scale(.99); border-color:var(--accent)}
   #centerMsg{
     position:fixed; left:50%; top:14%; transform:translateX(-50%); font-weight:900; letter-spacing:.5px;
-    background:rgba(14,18,32,.6); border:1px solid #243056; border-radius:12px; padding:8px 12px; display:none; z-index:15;
+    background:rgba(14,18,32,.7); border:1px solid #243056; border-radius:12px; padding:8px 12px; display:none; z-index:15;
   }
   #pad{
-    position:fixed; right:14px; bottom:14px; display:grid; grid-template-columns:68px 68px; gap:10px;
+    position:fixed; right:14px; bottom:14px; display:grid; grid-template-columns:78px 78px; gap:10px;
     opacity:.95; user-select:none; z-index:10;
   }
   .ctl{
-    background:rgba(14,18,32,.6); border:2px solid #2a3b6a; border-radius:14px; color:#cfe6ff; font-size:18px; font-weight:900;
-    display:flex; align-items:center; justify-content:center; height:60px; cursor:pointer
+    background:rgba(14,18,32,.7); border:2px solid #2a3b6a; border-radius:14px; color:#cfe6ff; font-size:18px; font-weight:900;
+    display:flex; align-items:center; justify-content:center; height:64px; cursor:pointer
   }
   .ctl:active{transform:scale(.98); border-color:var(--accent)}
   @media (min-width:880px){ #pad{display:none} }
@@ -52,6 +52,15 @@
   .qrow b{color:#bde3ff}
   .correctTag{font-weight:700;color:#22c55e;margin-left:6px}
   .wrongTag{font-weight:700;color:#ef4444;margin-left:6px}
+  /* Leaderboard */
+  table{width:100%;border-collapse:separate;border-spacing:0 8px}
+  th,td{padding:8px 10px;text-align:left}
+  th{opacity:.85}
+  tr.entry{background:#0b1428;border-radius:12px}
+  /* Tunnel choice banner */
+  #tunnelOverlay .card{display:flex;flex-direction:column;align-items:center}
+  .tunBtns{display:flex;gap:12px;margin-top:12px;flex-wrap:wrap;justify-content:center}
+  .tunBtns .btn{min-width:140px}
 </style>
 </head>
 <body>
@@ -59,7 +68,7 @@
   <div class="pill"><span>Time:</span> <span class="stat" id="time">05:00</span></div>
   <div class="pill"><span>Speed:</span> <span class="stat" id="speed">0</span></div>
   <div class="pill"><span>Coins:</span> <span class="stat" id="coins">0</span></div>
-  <div class="pill"><span>Distance:</span> <span class="stat" id="dist">0</span> m</div>
+  <div class="pill"><span>Distance:</span> <span class="stat"><span id="distM">0</span> m | <span id="distKm">0.00</span> km</span></div>
   <div class="pill"><span>Score:</span> <span class="stat" id="score">0</span></div>
   <div class="pill"><span>Correct:</span> <span class="stat" id="correct">0</span></div>
   <div class="pill"><span>Merits:</span> <span class="stat" id="merits">0</span></div>
@@ -86,14 +95,40 @@
   </div>
 </div>
 
-<!-- Review Overlay (end of 5 minutes) -->
+<!-- Tunnel choose overlay -->
+<div id="tunnelOverlay">
+  <div class="card">
+    <h2 style="margin:0 0 6px">Choose a Tunnel</h2>
+    <div>Each tunnel changes the vibe (coins/obstacles/colours) until the next set.</div>
+    <div class="tunBtns">
+      <button class="btn" data-tun="easy">Neon Paradise</button>
+      <button class="btn" data-tun="standard">Pulse District</button>
+      <button class="btn" data-tun="hard">Chaos Core</button>
+    </div>
+  </div>
+</div>
+
+<!-- Review Overlay -->
 <div id="review">
   <div class="card">
-    <div class="meta" style="margin-bottom:10px">
+    <div class="meta" style="margin-bottom:8px">
       <h2 style="margin:0">Session Review (5 minutes)</h2>
       <div style="margin-left:auto;font-weight:900">Merits: <span id="finalMerits">0</span></div>
     </div>
+
+    <h3 style="margin:6px 0">Your Answers</h3>
     <div id="reviewList"></div>
+
+    <h3 style="margin:14px 0 6px">Leaderboard (saved on this device)</h3>
+    <div style="display:flex;gap:6px;align-items:center;margin:6px 0">
+      <input id="playerName" placeholder="Enter name/initials" style="flex:1; padding:10px;border-radius:10px;border:1px solid #2a3b6a;background:#0b1428;color:#e7f6ff">
+      <button class="btn" id="saveScore">Save Score</button>
+    </div>
+    <table>
+      <thead><tr><th>#</th><th>Name</th><th>Score</th><th>Correct</th><th>Distance</th><th>Merits</th></tr></thead>
+      <tbody id="lbBody"></tbody>
+    </table>
+
     <div style="display:flex;gap:8px;margin-top:12px">
       <button class="btn" id="playAgain">Play Again</button>
       <button class="btn ghost" id="closeReview">Close</button>
@@ -116,70 +151,63 @@ const DPR = Math.min(2, window.devicePixelRatio || 1);
 
 /* ---------- Scene / Camera / Renderer ---------- */
 const scene = new THREE.Scene();
-scene.fog = new THREE.FogExp2(0x05060a, 0.03);
+scene.fog = new THREE.FogExp2(0x04060c, 0.03);
 
-const camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.1, 2000);
-camera.position.set(0, 2.4, 6);
+const camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.1, 2200);
+camera.position.set(0, 2.6, 6);
 
 const renderer = new THREE.WebGLRenderer({antialias:true});
-renderer.setClearColor(0x05060a, 1);
+renderer.setClearColor(0x04060c, 1);
 renderer.setPixelRatio(DPR);
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
 /* ---------- Lighting ---------- */
-const hemi = new THREE.HemisphereLight(0x1ae0ff, 0x090a12, 0.6);
+const hemi = new THREE.HemisphereLight(0x27e7ff, 0x090a12, 0.75);
 scene.add(hemi);
-const dir = new THREE.DirectionalLight(0xff2bd6, 0.7);
+const dir = new THREE.DirectionalLight(0xff2bd6, 0.9);
 dir.position.set(5, 8, 3);
 scene.add(dir);
+const fill = new THREE.PointLight(0x00e5ff, 0.6, 50); fill.position.set(0,5,0); scene.add(fill);
 
-/* ---------- Track ---------- */
+/* ---------- Track constants ---------- */
 const TRACK_WIDTH = 8;
 const SEG_LEN = 40;
-const SEG_COUNT = 12;
+const SEG_COUNT = 14;
 const WALL_H = 5;
 const FLOOR_Y = 0;
 
-const neonMat = (c)=> new THREE.MeshStandardMaterial({
-  color: c, metalness: 0.4, roughness: 0.2, emissive: c, emissiveIntensity: 0.5
-});
+/* Materials */
+const neonMat = (c)=> new THREE.MeshStandardMaterial({ color:c, metalness:0.4, roughness:0.2, emissive:c, emissiveIntensity:0.7 });
 const darkMat = new THREE.MeshStandardMaterial({color:0x0b0f1c, metalness:0.2, roughness:0.9});
 const glowLaneMat = (c)=> new THREE.MeshBasicMaterial({color:c});
 
-/* Blood-red graffiti texture: "Mr Samuels ENG HL Grade 10 TM" */
+/* Blood-red graffiti texture: “Mr Samuels ENG HL Grade 10 TM” — high res & emissive */
 function makeGraffitiTexture(text="Mr Samuels ENG HL Grade 10 TM"){
   const c = document.createElement("canvas");
-  c.width = 1024; c.height = 256;
+  c.width = 2048; c.height = 512;                      // higher res
   const g = c.getContext("2d");
-  // dark wall with bricks
   g.fillStyle = "#0b1020"; g.fillRect(0,0,c.width,c.height);
-  g.fillStyle = "#0e1428";
-  for(let x=0;x<c.width;x+=48){ for(let y=0;y<c.height;y+=24){ g.fillRect(x + (y%48?0:24), y, 44, 20); } }
-  // spray red style
-  g.font = "900 118px Impact, Arial Black, sans-serif";
-  g.textAlign="center";
-  g.translate(c.width/2, c.height/2 + 35);
-  g.rotate(-0.035);
-  // dark shadow
-  g.fillStyle = "#2b0004"; g.shadowColor="#ff2b2b"; g.shadowBlur=26;
+  g.fillStyle = "#0e1428"; for(let x=0;x<c.width;x+=64){ for(let y=0;y<c.height;y+=32){ g.fillRect(x + (y%64?0:32), y, 58, 26); } }
+  g.save(); g.translate(c.width/2, c.height/2 + 60); g.rotate(-0.035);
+  g.font = "900 240px Impact, Arial Black, sans-serif";
+  g.fillStyle = "#2b0004"; g.shadowColor="#ff2b2b"; g.shadowBlur=38; g.textAlign="center";
   g.fillText(text, 0, 0);
-  // thick outline
-  g.shadowBlur = 0; g.lineWidth = 12; g.strokeStyle = "#7a0000";
-  g.strokeText(text, 0, 0);
-  // blood red fill
-  const grd = g.createLinearGradient(-300,0,300,0);
+  g.shadowBlur = 0; g.lineWidth = 18; g.strokeStyle = "#7a0000"; g.strokeText(text, 0, 0);
+  const grd = g.createLinearGradient(-500,0,500,0);
   grd.addColorStop(0,"#b00020"); grd.addColorStop(1,"#ff2b2b");
   g.fillStyle = grd; g.fillText(text, 0, 0);
+  g.restore();
   const tex = new THREE.CanvasTexture(c);
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(2,1);
-  tex.anisotropy = 8;
+  tex.repeat.set(1,1);                                 // no over-repeat
+  tex.anisotropy = 16;
+  tex.magFilter = THREE.NearestFilter;                 // crisp
   return tex;
 }
 const wallTex = makeGraffitiTexture();
 
-/* Build segments */
+/* ---------- Build straight segments (we apply curve offset each frame) ---------- */
 const segments = [], wallsLeft=[], wallsRight=[], floors=[], laneStrips=[];
 const floorGeo = new THREE.PlaneGeometry(TRACK_WIDTH, SEG_LEN);
 const wallGeo  = new THREE.PlaneGeometry(SEG_LEN, WALL_H);
@@ -193,12 +221,12 @@ for (let i=0;i<SEG_COUNT;i++){
   floor.position.set(0, FLOOR_Y, -i*SEG_LEN);
   group.add(floor); floors.push(floor);
 
-  const matL = new THREE.MeshStandardMaterial({color:0xffffff, map:wallTex, metalness:0.2, roughness:0.8});
+  const matL = new THREE.MeshStandardMaterial({color:0xffffff, map:wallTex, metalness:0.2, roughness:0.8, emissive:0x530008, emissiveIntensity:0.5});
   const left = new THREE.Mesh(wallGeo, matL);
   left.rotation.y = Math.PI/2; left.position.set(-TRACK_WIDTH/2, WALL_H/2, -i*SEG_LEN);
   group.add(left); wallsLeft.push(left);
 
-  const matR = new THREE.MeshStandardMaterial({color:0xffffff, map:wallTex, metalness:0.2, roughness:0.8});
+  const matR = new THREE.MeshStandardMaterial({color:0xffffff, map:wallTex, metalness:0.2, roughness:0.8, emissive:0x530008, emissiveIntensity:0.5});
   const right = new THREE.Mesh(wallGeo, matR);
   right.rotation.y = -Math.PI/2; right.position.set(TRACK_WIDTH/2, WALL_H/2, -i*SEG_LEN);
   group.add(right); wallsRight.push(right);
@@ -212,158 +240,146 @@ for (let i=0;i<SEG_COUNT;i++){
   segments.push(group); scene.add(group);
 }
 
+/* Extra “billboard” graffiti panels nearer the track for readability */
+function addBillboard(z){
+  const g = new THREE.Mesh(new THREE.PlaneGeometry(6, 2), new THREE.MeshStandardMaterial({map:wallTex, emissive:0x7a0010, emissiveIntensity:0.8}));
+  g.position.set( (Math.random()<0.5?-1:1) * (TRACK_WIDTH/2 - 0.6), 1.4, z);
+  g.rotation.y = (g.position.x<0)?Math.PI/2:-Math.PI/2;
+  scene.add(g); return g;
+}
+const billboards = [];
+for(let i=0;i<8;i++) billboards.push(addBillboard(-i*SEG_LEN*1.7 - 20));
+
+/* ---------- Curve system ---------- */
+/* Smooth S-bends: everything’s global X = baseX + curveX(z) */
+let curveAmp = 2.2, curveFreq = 0.012, curvePhase = 0;
+function curveX(z){ return curveAmp * Math.sin(curveFreq * (z + curvePhase)); }
+
 /* ---------- Car (hover DeLorean vibe) ---------- */
 const car = new THREE.Group();
-// main body
-const body = new THREE.Mesh(
-  new THREE.BoxGeometry(1.6, 0.35, 3.0),
-  new THREE.MeshStandardMaterial({color:0x9aa4ac, metalness:0.8, roughness:0.25})
-);
+const body = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.35, 3.0), new THREE.MeshStandardMaterial({color:0x9aa4ac, metalness:0.8, roughness:0.25}));
 body.position.y = 0.45; car.add(body);
-// hood
-const hood = new THREE.Mesh(
-  new THREE.BoxGeometry(1.6, 0.2, 1.1),
-  new THREE.MeshStandardMaterial({color:0x8b949e, metalness:0.8, roughness:0.25})
-);
+const hood = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.2, 1.1), new THREE.MeshStandardMaterial({color:0x8b949e, metalness:0.8, roughness:0.25}));
 hood.position.set(0,0.6,0.9); car.add(hood);
-// windscreen
-const canopy = new THREE.Mesh(
-  new THREE.BoxGeometry(1.2, 0.32, 0.9),
-  new THREE.MeshStandardMaterial({color:0x1b223a, emissive:0x1b223a, emissiveIntensity:0.4, metalness:0.6, roughness:0.2})
-);
+const canopy = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.32, 0.9), new THREE.MeshStandardMaterial({color:0x1b223a, emissive:0x1b223a, emissiveIntensity:0.5, metalness:0.6, roughness:0.2}));
 canopy.position.set(0,0.7,0.2); car.add(canopy);
-// light bars / flux glow
 const barGeo = new THREE.BoxGeometry(0.15,0.15,2.6);
-const leftBar = new THREE.Mesh(barGeo, neonMat(0x00e5ff)); leftBar.position.set(-0.9,0.35,0);
-const rightBar= new THREE.Mesh(barGeo, neonMat(0xff2bd6)); rightBar.position.set( 0.9,0.35,0);
-car.add(leftBar,rightBar);
-// wheels (hover rims)
+car.add(new THREE.Mesh(barGeo, neonMat(0x00e5ff))).position.set(-0.9,0.35,0);
+const rightBar=new THREE.Mesh(barGeo, neonMat(0xff2bd6)); rightBar.position.set(0.9,0.35,0); car.add(rightBar);
 const wheelGeo = new THREE.CylinderGeometry(0.45,0.45,0.18,18);
-const wheelMat = new THREE.MeshStandardMaterial({color:0x0c111d, emissive:0x00e5ff, emissiveIntensity:0.25, metalness:0.7, roughness:0.4});
-function wheel(x,z){
-  const w = new THREE.Mesh(wheelGeo, wheelMat);
-  w.rotation.z = Math.PI/2; w.position.set(x,0.3,z);
-  const glow = new THREE.Mesh(new THREE.TorusGeometry(0.45,0.05,12,24), new THREE.MeshBasicMaterial({color:0x00e5ff}));
-  glow.position.set(x,0.3,z);
-  car.add(w,glow);
+const wheelMat = new THREE.MeshStandardMaterial({color:0x0c111d, emissive:0x00e5ff, emissiveIntensity:0.35, metalness:0.7, roughness:0.4});
+function wheel(x,z){ const w=new THREE.Mesh(wheelGeo, wheelMat); w.rotation.z=Math.PI/2; w.position.set(x,0.3,z);
+  const glow=new THREE.Mesh(new THREE.TorusGeometry(0.45,0.05,12,24), new THREE.MeshBasicMaterial({color:0x00e5ff}));
+  glow.position.set(x,0.3,z); car.add(w,glow);
 }
-wheel(-0.85, 1.0); wheel(0.85, 1.0); wheel(-0.85,-1.0); wheel(0.85,-1.0);
-
-car.position.set(0, 0.2, 4);
+wheel(-0.85,1.0); wheel(0.85,1.0); wheel(-0.85,-1.0); wheel(0.85,-1.0);
+car.position.set(0, 0.22, 4);
 scene.add(car);
 
-/* ---------- Collectibles, Obstacles, Speedups, Ramps ---------- */
-const coins = [], boosts = [], obstacles = [], speedups = [], ramps = [];
-
+/* ---------- Collectibles, Obstacles, Speedups, Ramps, Tunnels ---------- */
+const coins = [], boosts = [], obstacles = [], speedups = [], ramps = [], tunnels = [];
 const coinGeo = new THREE.TorusGeometry(0.25, 0.09, 12, 24);
-const coinMat = new THREE.MeshStandardMaterial({color:0xffe066, emissive:0xffcc00, emissiveIntensity:0.7, metalness:0.3, roughness:0.4});
-
+const coinMat = new THREE.MeshStandardMaterial({color:0xffe066, emissive:0xffcc00, emissiveIntensity:0.9, metalness:0.3, roughness:0.4});
 const boostGeo = new THREE.BoxGeometry(TRACK_WIDTH*0.7, 0.05, 2);
 const boostMat = new THREE.MeshBasicMaterial({color:0x73ffb2});
-
 const obstacleGeo = new THREE.BoxGeometry(1.8, 1.2, 1.4);
-const obstacleLabelTex = (()=>{
-  const c = document.createElement("canvas"); c.width=512; c.height=256;
-  const g = c.getContext("2d");
-  const grd = g.createLinearGradient(0,0,c.width,0);
-  grd.addColorStop(0,"#0b1026"); grd.addColorStop(1,"#1a2550");
-  g.fillStyle = grd; g.fillRect(0,0,c.width,c.height);
-  g.strokeStyle = "#5bc0ff"; g.lineWidth=8; g.strokeRect(6,6,c.width-12,c.height-12);
+const obstacleLabelTex = (()=>{ const c=document.createElement("canvas"); c.width=512;c.height=256; const g=c.getContext("2d");
+  const grd=g.createLinearGradient(0,0,c.width,0); grd.addColorStop(0,"#0b1026"); grd.addColorStop(1,"#1a2550");
+  g.fillStyle=grd; g.fillRect(0,0,c.width,c.height);
+  g.strokeStyle="#5bc0ff"; g.lineWidth=8; g.strokeRect(6,6,c.width-12,c.height-12);
   g.font="bold 34px Inter, Arial"; g.fillStyle="#e7f6ff"; g.textAlign="center"; g.shadowColor="#00e5ff"; g.shadowBlur=16;
   g.fillText("Mr Samuels – Grade 10 English ™", c.width/2, c.height/2 + 12);
-  const tex = new THREE.CanvasTexture(c); tex.anisotropy=8; return tex;
-})();
-const obstacleMat = new THREE.MeshStandardMaterial({
-  color:0xffffff, metalness:0.3, roughness:0.6, map:obstacleLabelTex, emissive:0x142042, emissiveIntensity:0.35
-});
-
-/* Speed-Up points (chevrons) */
+  const tex=new THREE.CanvasTexture(c); tex.anisotropy=8; return tex; })();
+const obstacleMat = new THREE.MeshStandardMaterial({ color:0xffffff, metalness:0.3, roughness:0.6, map:obstacleLabelTex, emissive:0x142042, emissiveIntensity:0.45 });
 const speedupGeo = new THREE.ConeGeometry(0.35, 0.9, 16);
-const speedupMat = new THREE.MeshStandardMaterial({color:0x73fffb, emissive:0x00e5ff, emissiveIntensity:0.7, metalness:0.2, roughness:0.3});
-
-/* Ramps (simple prism block + sloped top) */
-function rampMesh(){
-  const geom = new THREE.BoxGeometry(2.4,0.2,2.6);
-  const mat = new THREE.MeshStandardMaterial({color:0x1935ff, emissive:0x1935ff, emissiveIntensity:0.3, metalness:0.2, roughness:0.6});
-  const ramp = new THREE.Mesh(geom, mat);
-  const slope = new THREE.Mesh(new THREE.BoxGeometry(2.4,0.1,2.6), new THREE.MeshStandardMaterial({color:0x00e5ff, emissive:0x00e5ff, emissiveIntensity:0.5}));
-  slope.position.y = 0.16; slope.rotation.x = -Math.PI*0.12;
-  ramp.add(slope);
-  return ramp;
+const speedupMat = new THREE.MeshStandardMaterial({color:0x73fffb, emissive:0x00e5ff, emissiveIntensity:1.0, metalness:0.2, roughness:0.3});
+function rampMesh(){ const geom=new THREE.BoxGeometry(2.4,0.2,2.6);
+  const mat=new THREE.MeshStandardMaterial({color:0x1935ff, emissive:0x1935ff, emissiveIntensity:0.5, metalness:0.2, roughness:0.6});
+  const ramp=new THREE.Mesh(geom,mat); const slope=new THREE.Mesh(new THREE.BoxGeometry(2.4,0.1,2.6), new THREE.MeshStandardMaterial({color:0x00e5ff, emissive:0x00e5ff, emissiveIntensity:0.8}));
+  slope.position.y=0.16; slope.rotation.x=-Math.PI*0.12; ramp.add(slope); return ramp;
+}
+/* Tunnel arches (three lanes) */
+function makeTunnel(z){
+  const group=new THREE.Group(); group.userData.type="tunnel";
+  const archGeo=new THREE.TorusGeometry(1.6,0.2,12,40,Math.PI);
+  const archMatA=neonMat(0x00e5ff), archMatB=neonMat(0xff2bd6), archMatC=neonMat(0x73ffb2);
+  const lanes=[-2.6,0,2.6], mats=[archMatA,archMatB,archMatC];
+  lanes.forEach((x,i)=>{ const a=new THREE.Mesh(archGeo,mats[i]); a.rotation.x=Math.PI/2; a.position.set(x,1.4,z); group.add(a); });
+  scene.add(group); return group;
 }
 
+/* Spawners */
 const spawnPoolZ = -SEG_COUNT*SEG_LEN + 10;
 function randX(){ return (Math.random()*0.8-0.4) * (TRACK_WIDTH*0.8); }
-function laneX(){ const lanes=[-2.6,0,2.6]; return lanes[Math.floor(Math.random()*lanes.length)]; }
+function laneX(){ const lanes=[-2.6,0,2.6]; return lanes[(Math.random()*lanes.length)|0]; }
+function spawnCoin(z){ const m=new THREE.Mesh(coinGeo, coinMat); m.position.set(randX(), 0.7, z); m.userData={type:"coin", baseX:m.position.x}; scene.add(m); coins.push(m); }
+function spawnBoost(z){ const m=new THREE.Mesh(boostGeo, boostMat); m.position.set(0, 0.03, z); m.rotation.x=-Math.PI/2; m.userData={type:"boost", baseX:0}; scene.add(m); boosts.push(m); }
+function spawnObstacle(z){ const m=new THREE.Mesh(obstacleGeo, obstacleMat); m.position.set(laneX(), 0.6, z); m.userData={type:"obstacle", baseX:m.position.x, phase:Math.random()*Math.PI*2, amp:0.35+Math.random()*0.35}; scene.add(m); obstacles.push(m); }
+function spawnSpeedup(z){ const m=new THREE.Mesh(speedupGeo, speedupMat); m.position.set(laneX(), 0.5, z); m.rotation.x=Math.PI; m.userData={type:"speedup", baseX:m.position.x}; scene.add(m); speedups.push(m); }
+function spawnRamp(z){ const m=rampMesh(); m.position.set(laneX(), 0.1, z); m.userData={type:"ramp", baseX:m.position.x}; scene.add(m); ramps.push(m); }
+function spawnTunnel(z){ const t=makeTunnel(z); tunnels.push(t); }
 
-function spawnCoin(z){
-  const m = new THREE.Mesh(coinGeo, coinMat);
-  m.position.set(randX(), 0.7, z);
-  m.userData.type = "coin";
-  scene.add(m); coins.push(m);
-}
-function spawnBoost(z){
-  const m = new THREE.Mesh(boostGeo, boostMat);
-  m.position.set(0, 0.03, z);
-  m.rotation.x = -Math.PI/2;
-  m.userData.type = "boost";
-  scene.add(m); boosts.push(m);
-}
-function spawnObstacle(z){
-  const m = new THREE.Mesh(obstacleGeo, obstacleMat);
-  m.position.set(laneX(), 0.6, z);
-  m.userData.type = "obstacle";
-  m.userData.baseX = m.position.x;
-  m.userData.phase = Math.random()*Math.PI*2;
-  m.userData.amp = 0.35 + Math.random()*0.35;   // gentler sway
-  scene.add(m); obstacles.push(m);
-}
-function spawnSpeedup(z){
-  const m = new THREE.Mesh(speedupGeo, speedupMat);
-  m.position.set(laneX(), 0.5, z);
-  m.rotation.x = Math.PI; // arrow backward
-  m.userData.type = "speedup";
-  scene.add(m); speedups.push(m);
-}
-function spawnRamp(z){
-  const m = rampMesh();
-  m.position.set(laneX(), 0.1, z);
-  m.userData.type = "ramp";
-  scene.add(m); ramps.push(m);
-}
-
-/* Sparse layout */
+/* Initial population (sparse, colourful) */
 for (let i=0;i<6;i++)  spawnCoin(spawnPoolZ + Math.random()*SEG_COUNT*SEG_LEN);
 for (let i=0;i<5;i++)  spawnBoost(spawnPoolZ + Math.random()*SEG_COUNT*SEG_LEN);
 for (let i=0;i<8;i++)  spawnObstacle(spawnPoolZ + Math.random()*SEG_COUNT*SEG_LEN);
 for (let i=0;i<6;i++)  spawnSpeedup(spawnPoolZ + Math.random()*SEG_COUNT*SEG_LEN);
 for (let i=0;i<5;i++)  spawnRamp(spawnPoolZ + Math.random()*SEG_COUNT*SEG_LEN);
+for (let i=0;i<3;i++)  spawnTunnel(spawnPoolZ + Math.random()*SEG_COUNT*SEG_LEN);
+
+/* ---------- Drones ---------- */
+const drones=[];
+function spawnDrone(){
+  const g=new THREE.Group();
+  const body=new THREE.Mesh(new THREE.SphereGeometry(0.25,16,12), new THREE.MeshStandardMaterial({color:0xffffff, emissive:0x00e5ff, emissiveIntensity:0.9, metalness:0.2, roughness:0.3}));
+  g.add(body);
+  const light=new THREE.PointLight(0x00e5ff, 1.2, 8); g.add(light);
+  g.position.set((Math.random()*2-1)*5, 3+Math.random()*2, -SEG_LEN*SEG_COUNT + Math.random()*SEG_LEN*SEG_COUNT);
+  g.userData={type:"drone", vx:(Math.random()<0.5?-1:1)*(0.5+Math.random()), life:6+Math.random()*6};
+  scene.add(g); drones.push(g);
+}
+setInterval(()=>{ if(drones.length<3) spawnDrone(); }, 3000);
 
 /* ---------- Game state ---------- */
-let running = true, pausedForQuiz = false;
+let running = true, pausedForQuiz = false, choosingTunnel=false;
 let tPrev = performance.now();
 /* Slower baseline speeds */
 let speed = 12, targetSpeed = 14, maxSpeed = 26, minSpeed = 6;
 
 let steer = 0;
-let dist = 0;
+let dist = 0;            // meters
 let score = 0;
 let coinsCount = 0;
 let boostTimer = 0;
 let speedupTimer = 0;
-
 let correct = 0;
 let merits = 0;
 
 /* Session timer: 5 minutes (300s) */
 const SESSION_DURATION = 300;
-let sessionLeft = SESSION_DURATION; // seconds
+let sessionLeft = SESSION_DURATION;
 
 /* Jump physics */
-let vy = 0;               // vertical velocity
-const baseY = 0.2;        // hover baseline
-const gravity = -9.6;     // m/s^2 (scaled)
+let vy = 0;
+const baseY = 0.22;
+const gravity = -9.6;
 let onGround = true;
+
+/* Tunnel profiles */
+let profile = "standard"; // easy | standard | hard
+const profiles = {
+  easy:     {obDensity:0.6, coinExtra: 2, speedMax:28, colours:[0x66ffea,0x9bff66]},
+  standard: {obDensity:1.0, coinExtra: 0, speedMax:30, colours:[0x00e5ff,0xff2bd6]},
+  hard:     {obDensity:1.4, coinExtra:-1, speedMax:34, colours:[0xff7a00,0xff2bd6]},
+};
+function applyProfile(p){
+  const c = profiles[p].colours;
+  laneStrips.forEach((s,i)=>{ s.material.color.setHex(i%2?c[0]:c[1]); });
+  maxSpeed = profiles[p].speedMax;
+  profile = p;
+}
+/* schedule tunnels every ~700m */
+let nextTunnelAt = 700;
 
 /* Quiz tracking for review */
 const askedLog = []; // {q, a[], correctIndex, chosenIndex|null, result}
@@ -373,7 +389,8 @@ const hud = {
   time: document.getElementById("time"),
   speed: document.getElementById("speed"),
   coins: document.getElementById("coins"),
-  dist:  document.getElementById("dist"),
+  distM: document.getElementById("distM"),
+  distKm: document.getElementById("distKm"),
   score: document.getElementById("score"),
   correct: document.getElementById("correct"),
   merits: document.getElementById("merits"),
@@ -387,12 +404,12 @@ const toast = document.getElementById("toast");
 const review = document.getElementById("review");
 const reviewList = document.getElementById("reviewList");
 const finalMerits = document.getElementById("finalMerits");
+const tunnelOverlay = document.getElementById("tunnelOverlay");
 
-/* ---------- Input ---------- */
+/* ---------- Input (keyboard + touch pad) ---------- */
 const keys = {};
 window.addEventListener("keydown", e=>{ keys[e.key.toLowerCase()] = true; });
 window.addEventListener("keyup",   e=>{ keys[e.key.toLowerCase()] = false; });
-
 document.getElementById("left").addEventListener("pointerdown", ()=>keys["arrowleft"]=true);
 document.getElementById("right").addEventListener("pointerdown", ()=>keys["arrowright"]=true);
 document.getElementById("boost").addEventListener("pointerdown", ()=>keys[" "]=true);
@@ -407,15 +424,13 @@ document.getElementById("brake").addEventListener("pointerdown", ()=>keys["shift
 });
 
 /* ---------- Helpers ---------- */
-function aabbIntersect(a,b){
-  return (Math.abs(a.x-b.x) <= (a.w+b.w)*0.5) && (Math.abs(a.z-b.z) <= (a.d+b.d)*0.5);
-}
-function carAABB(){ return {x:car.position.x, z:car.position.z, w:1.6, d:2.6}; }
+function aabbIntersect(a,b){ return (Math.abs(a.x-b.x) <= (a.w+b.w)*0.5) && (Math.abs(a.z-b.z) <= (a.d+b.d)*0.5); }
+function carAABB(){ return {x:car.position.x + curveX(car.position.z), z:car.position.z, w:1.6, d:2.6}; } // global X with curve
 function showToast(msg, ms=900){ toast.textContent = msg; toast.style.display = "block"; setTimeout(()=>toast.style.display="none", ms); }
 function centerFlash(msg, ms=800){ centerMsg.textContent = msg; centerMsg.style.display = "block"; setTimeout(()=>centerMsg.style.display="none", ms); }
 function fmtTime(s){ s=Math.max(0,Math.floor(s)); const m=String(Math.floor(s/60)).padStart(2,"0"); const sec=String(s%60).padStart(2,"0"); return `${m}:${sec}`; }
 
-/* ---------- Quiz (50 Qs, 10s timer, merits) ---------- */
+/* ---------- Quiz (50 Qs, 10s per Q, merits) ---------- */
 const QUIZ = [
   {q:"Who is elected chief at the start?", a:["Jack","Piggy","Ralph","Simon"], c:2},
   {q:"The conch symbolizes…", a:["Violence","Civilization & order","Hunting","Fear"], c:1},
@@ -470,125 +485,125 @@ const QUIZ = [
   {q:"The mask makes Jack feel…", a:["Ashamed","Liberated from shame/self","Sleepy","Older"], c:1},
 ];
 
-/* Randomise questions each restart */
+/* Randomise each restart */
 let quizOrder=[], quizPtr=0;
-function seedQuizOrder(){ quizOrder = [...Array(QUIZ.length).keys()]; shuffle(quizOrder); quizPtr=0; }
-function shuffle(arr){ for(let i=arr.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]]; } }
+function seedQuizOrder(){ quizOrder=[...Array(QUIZ.length).keys()]; shuffle(quizOrder); quizPtr=0; }
+function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=(Math.random()*(i+1))|0; [a[i],a[j]]=[a[j],a[i]]; } }
 function nextQuestionIndex(){ const idx=quizOrder[quizPtr]; quizPtr=(quizPtr+1)%QUIZ.length; if(quizPtr===0) shuffle(quizOrder); return idx; }
 
 /* Per-question 10s timer */
 let timerId=null; const QUESTION_TIME=10; let tLeft=QUESTION_TIME;
 function startTimer(onExpire){
-  clearInterval(timerId); tLeft=QUESTION_TIME; tLeftEl.textContent=tLeft.toString();
-  timerId=setInterval(()=>{ tLeft--; tLeftEl.textContent=tLeft.toString(); if(tLeft<=0){ clearInterval(timerId); onExpire(); } },1000);
+  clearInterval(timerId); tLeft=QUESTION_TIME; tLeftEl.textContent=String(tLeft);
+  timerId=setInterval(()=>{ tLeft--; tLeftEl.textContent=String(tLeft); if(tLeft<=0){ clearInterval(timerId); onExpire(); } },1000);
 }
 
 /* Merits */
-function awardIfMerit(){ const target=Math.floor(correct/10); if(target>merits){ merits=target; hud.merits.textContent=merits.toString(); centerFlash(`🏅 Merit +1 (Total ${merits})`, 1200); } }
+function awardIfMerit(){ const target=Math.floor(correct/10); if(target>merits){ merits=target; hud.merits.textContent=String(merits); centerFlash(`🏅 Merit +1 (Total ${merits})`, 1200); } }
 
-/* Ask question (neutral options; no reveal) */
+/* Ask question (neutral) */
 function askQuestion(){
   pausedForQuiz=true; overlay.style.display="flex"; answersEl.innerHTML="";
   const idx = nextQuestionIndex();
   const q = QUIZ[idx]; qText.textContent=q.q;
-
   const order=[0,1,2,3]; shuffle(order);
-
-  order.forEach((optIndex)=>{
-    const b=document.createElement("button");
-    b.className="choice";                      // NEUTRAL style
-    b.textContent=q.a[optIndex];
+  order.forEach(opt=>{
+    const b=document.createElement("button"); b.className="choice"; b.textContent=q.a[opt];
     b.onclick=()=>{ clearInterval(timerId);
-      const ok=(optIndex===q.c);
-      askedLog.push({q:q.q, a:q.a, correctIndex:q.c, chosenIndex:optIndex, result: ok?"correct":"wrong"});
-      if(ok){ correct++; score+=25; hud.correct.textContent=correct.toString(); awardIfMerit(); centerFlash("✅ Answer recorded", 700); }
-      else{ score=Math.max(0,score-5); centerFlash("📝 Answer recorded", 700); }
+      const ok=(opt===q.c);
+      askedLog.push({q:q.q, a:q.a, correctIndex:q.c, chosenIndex:opt, result: ok?"correct":"wrong"});
+      if(ok){ correct++; score+=25; hud.correct.textContent=String(correct); awardIfMerit(); centerFlash("✅ Answer recorded", 600); }
+      else{ score=Math.max(0,score-5); centerFlash("📝 Answer recorded", 600); }
       overlay.style.display="none"; pausedForQuiz=false;
     };
-    b.oncontextmenu=(e)=>e.preventDefault();
     answersEl.appendChild(b);
   });
-
-  startTimer(()=>{
-    askedLog.push({q:q.q, a:q.a, correctIndex:q.c, chosenIndex:null, result:"timeout"});
-    score=Math.max(0,score-5); centerFlash("⌛ Time’s up!", 900); overlay.style.display="none"; pausedForQuiz=false;
-  });
+  startTimer(()=>{ askedLog.push({q:q.q, a:q.a, correctIndex:q.c, chosenIndex:null, result:"timeout"}); score=Math.max(0,score-5); centerFlash("⌛ Time’s up!", 900); overlay.style.display="none"; pausedForQuiz=false; });
 }
-document.getElementById("skip").onclick = ()=>{ clearInterval(timerId); overlay.style.display = "none"; pausedForQuiz = false; };
-document.getElementById("resume").onclick = ()=>{ clearInterval(timerId); overlay.style.display = "none"; pausedForQuiz = false; };
+document.getElementById("skip").onclick = ()=>{ clearInterval(timerId); overlay.style.display="none"; pausedForQuiz=false; };
+document.getElementById("resume").onclick = ()=>{ clearInterval(timerId); overlay.style.display="none"; pausedForQuiz=false; };
 
-/* ---------- Controls / Pause / Restart ---------- */
+/* ---------- Pause / Restart ---------- */
 document.getElementById("pauseBtn").onclick = ()=>{ running=!running; centerFlash(running?"▶ RESUME":"II PAUSED",800); };
 document.getElementById("restartBtn").onclick = reset;
+
+/* ---------- Review & Leaderboard ---------- */
+function showReview(){
+  finalMerits.textContent = String(merits);
+  reviewList.innerHTML = "";
+  askedLog.forEach((item,i)=>{
+    const row=document.createElement("div"); row.className="qrow";
+    const chosen = item.chosenIndex!=null ? item.a[item.chosenIndex] : "No answer";
+    const correctAns = item.a[item.correctIndex];
+    const tag = item.result==="correct" ? `<span class="correctTag">✓ Correct</span>` :
+               item.result==="wrong"   ? `<span class="wrongTag">✗ Wrong</span>` :
+                                         `<span class="wrongTag">⌛ Time</span>`;
+    row.innerHTML = `<div><b>Q${i+1}.</b> ${item.q} ${tag}</div>
+                     <div>Your answer: <b>${chosen}</b></div>
+                     <div>Correct answer: <b>${correctAns}</b></div>`;
+    reviewList.appendChild(row);
+  });
+  renderLeaderboard(); review.style.display="flex";
+}
 document.getElementById("playAgain").onclick = ()=>{ review.style.display="none"; reset(); };
 document.getElementById("closeReview").onclick = ()=>{ review.style.display="none"; };
 
-/* ---------- End of session review ---------- */
-function showReview(){
-  finalMerits.textContent = merits.toString();
-  reviewList.innerHTML = "";
-  if(askedLog.length===0){
-    const d=document.createElement("div"); d.textContent="No questions were asked this session."; reviewList.appendChild(d);
-  }else{
-    askedLog.forEach((item, i)=>{
-      const row = document.createElement("div"); row.className="qrow";
-      const correctAns = item.a[item.correctIndex];
-      const chosenAns = item.chosenIndex!=null ? item.a[item.chosenIndex] : "No answer";
-      const tag = item.result==="correct" ? `<span class="correctTag">✓ Correct</span>` :
-                 item.result==="wrong"   ? `<span class="wrongTag">✗ Wrong</span>` :
-                                           `<span class="wrongTag">⌛ Time</span>`;
-      row.innerHTML = `<div><b>Q${i+1}.</b> ${item.q} ${tag}</div>
-                       <div>Your answer: <b>${chosenAns}</b></div>
-                       <div>Correct answer: <b>${correctAns}</b></div>`;
-      reviewList.appendChild(row);
-    });
-  }
-  review.style.display = "flex";
+/* Leaderboard (localStorage) */
+const LB_KEY="nd_lotf_leaderboard_v1";
+function getLB(){ try{ return JSON.parse(localStorage.getItem(LB_KEY)||"[]"); }catch(_){return [];} }
+function setLB(list){ localStorage.setItem(LB_KEY, JSON.stringify(list.slice(0,10))); }
+function renderLeaderboard(){
+  const lb = getLB().slice(0,10);
+  const body=document.getElementById("lbBody"); body.innerHTML="";
+  lb.forEach((e,i)=>{
+    const tr=document.createElement("tr"); tr.className="entry";
+    tr.innerHTML=`<td>${i+1}</td><td>${e.name}</td><td>${e.score}</td><td>${e.correct}</td><td>${e.distKm.toFixed(2)} km</td><td>${e.merits}</td>`;
+    body.appendChild(tr);
+  });
 }
+document.getElementById("saveScore").onclick = ()=>{
+  const name=(document.getElementById("playerName").value||"Player").slice(0,24);
+  const lb=getLB(); lb.push({name, score, correct, distM:Math.floor(dist), distKm:dist/1000, merits, t:Date.now()});
+  lb.sort((a,b)=>b.score-a.score); setLB(lb); renderLeaderboard(); centerFlash("💾 Saved to leaderboard", 800);
+};
 
 /* ---------- Reset ---------- */
 function reset(){
-  running=true; pausedForQuiz=false; boostTimer=0; speedupTimer=0;
-  speed=12; targetSpeed=14; maxSpeed=26; dist=0; score=0; coinsCount=0;
+  running=true; pausedForQuiz=false; choosingTunnel=false; boostTimer=0; speedupTimer=0;
+  speed=12; targetSpeed=14; maxSpeed=profiles[profile].speedMax; dist=0; score=0; coinsCount=0;
   correct=0; merits=0; hud.correct.textContent="0"; hud.merits.textContent="0";
   vy=0; onGround=true; car.position.set(0,baseY,4);
   sessionLeft = SESSION_DURATION; hud.time.textContent = fmtTime(sessionLeft);
-  askedLog.length = 0;
-  seedQuizOrder();
+  askedLog.length = 0; seedQuizOrder(); applyProfile("standard"); nextTunnelAt=700;
 
-  [...coins].forEach(c=>{ c.position.set(randX(), 0.7, -Math.random()*SEG_COUNT*SEG_LEN); });
-  [...boosts].forEach(b=>{ b.position.set(0, 0.03, -Math.random()*SEG_COUNT*SEG_LEN); });
-  [...speedups].forEach(s=>{ s.position.set(laneX(), 0.5, -Math.random()*SEG_COUNT*SEG_LEN); });
-  [...obstacles].forEach(o=>{
-    o.position.set(laneX(), 0.6, -Math.random()*SEG_COUNT*SEG_LEN);
-    o.userData.baseX = o.position.x; o.userData.phase = Math.random()*Math.PI*2;
-  });
-  [...ramps].forEach(r=>{ r.position.set(laneX(), 0.1, -Math.random()*SEG_COUNT*SEG_LEN); });
+  [...coins].forEach(c=>{ c.userData.baseX=randX(); c.position.set(0.0, 0.7, -Math.random()*SEG_COUNT*SEG_LEN); });
+  [...boosts].forEach(b=>{ b.userData.baseX=0; b.position.set(0, 0.03, -Math.random()*SEG_COUNT*SEG_LEN); });
+  [...speedups].forEach(s=>{ s.userData.baseX=laneX(); s.position.set(0.0, 0.5, -Math.random()*SEG_COUNT*SEG_LEN); });
+  [...obstacles].forEach(o=>{ o.userData.baseX=laneX(); o.userData.phase=Math.random()*Math.PI*2; o.position.set(0.0, 0.6, -Math.random()*SEG_COUNT*SEG_LEN); });
+  [...ramps].forEach(r=>{ r.userData.baseX=laneX(); r.position.set(0.0, 0.1, -Math.random()*SEG_COUNT*SEG_LEN); });
+  [...tunnels].forEach(t=>{ t.position.z = -Math.random()*SEG_COUNT*SEG_LEN - 100; });
+
   centerFlash("⟲ RESTART");
 }
 
 /* ---------- Main loop ---------- */
-let hitCooldown=0; // brief invulnerability after an obstacle hit
+let hitCooldown=0;
 function animate(now){
   requestAnimationFrame(animate);
   const dt = Math.min(0.05, (now - tPrev)/1000); tPrev = now;
   hitCooldown = Math.max(0, hitCooldown - dt);
 
-  if(running && !pausedForQuiz){
+  /* Session timer */
+  if(running && !pausedForQuiz && !choosingTunnel){
     sessionLeft -= dt;
     if(sessionLeft <= 0){
-      sessionLeft = 0;
-      running = false;
-      hud.time.textContent = fmtTime(0);
-      showReview();
-    } else {
-      hud.time.textContent = fmtTime(sessionLeft);  // 5-min countdown
-    }
+      sessionLeft = 0; running = false; hud.time.textContent = fmtTime(0); showReview();
+    } else { hud.time.textContent = fmtTime(sessionLeft); }
   }
 
-  if(!running || pausedForQuiz) { renderer.render(scene, camera); return; }
+  if(!running || pausedForQuiz || choosingTunnel){ renderer.render(scene, camera); return; }
 
-  // inputs
+  /* Controls */
   const steerLeft = keys["arrowleft"]||keys["a"];
   const steerRight= keys["arrowright"]||keys["d"];
   const boostKey  = keys[" "]||keys["arrowup"];
@@ -598,138 +613,150 @@ function animate(now){
   else if(steerRight && !steerLeft) steer = THREE.MathUtils.damp(steer,  1.0, 8, dt);
   else steer = THREE.MathUtils.damp(steer, 0, 6, dt);
 
-  // speed model (slower baseline + temporary boosts)
   if(boostKey) targetSpeed = Math.min(maxSpeed, targetSpeed + 6*dt);
   if(brakeKey) targetSpeed = Math.max(minSpeed, targetSpeed - 15*dt);
   if(boostTimer>0){ targetSpeed = Math.max(targetSpeed, maxSpeed); boostTimer -= dt; }
   if(speedupTimer>0){ targetSpeed = Math.max(targetSpeed, maxSpeed-2); speedupTimer -= dt; }
   speed = THREE.MathUtils.damp(speed, targetSpeed, 3, dt);
 
-  // lateral motion
+  /* Car local X then curve to global */
   car.position.x += steer * 5 * dt;
   car.position.x = THREE.MathUtils.clamp(car.position.x, -TRACK_WIDTH/2+0.9, TRACK_WIDTH/2-0.9);
 
-  // jump / gravity
-  if(!onGround){
-    vy += gravity * dt;
-    car.position.y += vy * dt;
-    if(car.position.y <= baseY){
-      car.position.y = baseY; vy = 0; onGround = true;
-    }
-  }else{
-    const hover = Math.sin(now*0.004)*0.02; car.position.y = baseY + hover;
-  }
+  /* Jump / gravity */
+  if(!onGround){ vy += gravity * dt; car.position.y += vy * dt; if(car.position.y <= baseY){ car.position.y = baseY; vy = 0; onGround = true; } }
+  else{ const hover = Math.sin(now*0.004)*0.02; car.position.y = baseY + hover; }
 
-  // world scroll
+  /* World scroll & curve */
   const moveZ = speed * dt;
-  dist += moveZ;
+  dist += moveZ; hud.distM.textContent = String(Math.floor(dist)); hud.distKm.textContent = (dist/1000).toFixed(2);
   score = Math.floor(dist) + coinsCount*50 + Math.floor(speed*2);
+
+  /* animate curve phase slowly to create turns */
+  curvePhase += moveZ * 20;
+
   segments.forEach((g)=>{
     g.position.z += moveZ;
-    if(g.position.z > SEG_LEN) g.position.z -= SEG_LEN*SEG_COUNT;
+    const off = curveX(g.position.z);
+    g.position.x = off;                           // shift whole segment by curve
+    if(g.position.z > SEG_LEN){ g.position.z -= SEG_LEN*SEG_COUNT; }
   });
+  billboards.forEach(b=>{ b.position.z += moveZ; b.position.x = (b.position.x<0?-1:1)*(TRACK_WIDTH/2-0.6) + curveX(b.position.z); if(b.position.z>20) b.position.z -= SEG_LEN*SEG_COUNT*1.7; });
 
-  // move & recycle
-  const scrollers = [...laneStrips, ...coins, ...boosts, ...wallsLeft, ...wallsRight, ...floors, ...obstacles, ...speedups, ...ramps];
+  /* Move & recycle collectibles/obstacles with curve-aware positions */
+  const scrollers = [...coins, ...boosts, ...speedups, ...obstacles, ...ramps, ...tunnels, ...drones];
   scrollers.forEach(m=>{
     m.position.z += moveZ;
+
     if(m.userData && m.userData.type==="obstacle"){
-      m.position.x = m.userData.baseX + Math.sin(now*0.002 + m.userData.phase)*m.userData.amp;
+      const base = m.userData.baseX + Math.sin(now*0.002 + m.userData.phase)*m.userData.amp;
+      m.position.x = base + curveX(m.position.z);
+    }else if(m.userData && m.userData.baseX!=null){
+      m.position.x = m.userData.baseX + curveX(m.position.z);
     }
-    if(m.position.z > 10){
+
+    if(m.userData && m.userData.type==="drone"){
+      m.position.x += m.userData.vx * dt;
+      m.userData.life -= dt;
+      if(m.userData.life<=0){ scene.remove(m); drones.splice(drones.indexOf(m),1); }
+    }
+
+    if(m.position.z > 12){
       let offset = SEG_LEN*SEG_COUNT;
-      if(m.userData && m.userData.type==="coin") offset += 50 + Math.random()*40; // sparse coins
+      if(m.userData && m.userData.type==="coin") offset += 60 + Math.random()*40;
       if(m.userData && m.userData.type==="speedup") offset += 40 + Math.random()*40;
       if(m.userData && m.userData.type==="ramp") offset += 40 + Math.random()*40;
+      if(m.userData && m.userData.type==="tunnel") offset += SEG_LEN*SEG_COUNT + 120;
       m.position.z -= offset;
-      if(m.userData && (m.userData.type==="coin" || m.userData.type==="speedup" || m.userData.type==="ramp" || m.userData.type==="obstacle")){
-        m.position.x = laneX();
-        if(m.userData.type==="obstacle"){ m.userData.baseX = m.position.x; m.userData.phase = Math.random()*Math.PI*2; }
+
+      if(m.userData){
+        if(m.userData.type==="coin") m.userData.baseX = randX();
+        if(m.userData.type==="speedup" || m.userData.type==="ramp" || m.userData.type==="obstacle") m.userData.baseX = laneX();
+        if(m.userData.type==="obstacle"){ m.userData.phase=Math.random()*Math.PI*2; }
       }
-      if(m.userData && m.userData.type==="boost"){ m.position.x = 0; }
     }
   });
 
-  // walls slow
+  /* Walls slow if clipping */
   const edge = TRACK_WIDTH/2 - 1;
-  if(Math.abs(car.position.x) > edge){
+  const carGlobalX = car.position.x + curveX(car.position.z);
+  if(Math.abs(carGlobalX) > edge){
     targetSpeed = Math.max(minSpeed, targetSpeed - 6*dt);
-    car.position.x = THREE.MathUtils.clamp(car.position.x, -edge, edge);
+    car.position.x = THREE.MathUtils.clamp(car.position.x, -edge - curveX(car.position.z), edge - curveX(car.position.z));
     centerFlash("⚡ WALL HIT – SLOW!", 250);
   }
 
   const carBox = carAABB();
 
-  // coin -> quiz
+  /* Coins -> quiz */
   coins.forEach(c=>{
-    const box = {x:c.position.x, z:c.position.z, w:0.6, d:0.6};
+    const box = {x:c.userData.baseX + curveX(c.position.z), z:c.position.z, w:0.6, d:0.6};
     if(aabbIntersect(carBox, box)){
       coinsCount++; score += 10;
-      c.position.z -= SEG_LEN*SEG_COUNT + 50 + Math.random()*40;
-      c.position.x = randX();
-      showToast("🪙 Coin!");
-      askQuestion();
+      c.position.z -= SEG_LEN*SEG_COUNT + 60 + Math.random()*40; c.userData.baseX = randX();
+      showToast("🪙 Coin!"); askQuestion();
     }
   });
 
-  // boosts (floor bars) -> hard boost
+  /* Boost bars */
   boosts.forEach(b=>{
-    const box = {x:b.position.x, z:b.position.z, w:TRACK_WIDTH*0.7, d:1.8};
+    const box = {x:b.userData.baseX + curveX(b.position.z), z:b.position.z, w:TRACK_WIDTH*0.7, d:1.8};
     if(aabbIntersect(carBox, box)){
-      boostTimer = 2.5; maxSpeed = 32;
-      targetSpeed = Math.max(targetSpeed, 28);
-      centerFlash("🚀 BOOST +", 650);
-      b.position.z -= SEG_LEN*SEG_COUNT;
+      boostTimer = 2.5; maxSpeed = Math.max(maxSpeed, profiles[profile].speedMax+2);
+      targetSpeed = Math.max(targetSpeed, Math.min(28, maxSpeed-2));
+      centerFlash("🚀 BOOST +", 650); b.position.z -= SEG_LEN*SEG_COUNT;
     }
   });
 
-  // speed-up points (chevrons)
+  /* Speed-ups */
   speedups.forEach(s=>{
-    const box = {x:s.position.x, z:s.position.z, w:0.8, d:0.9};
+    const box = {x:s.userData.baseX + curveX(s.position.z), z:s.position.z, w:0.8, d:0.9};
     if(aabbIntersect(carBox, box)){
-      speedupTimer = 4.0;
-      maxSpeed = Math.max(maxSpeed, 28);
-      targetSpeed = Math.max(targetSpeed, 24);
+      speedupTimer = 4.0; maxSpeed = Math.max(maxSpeed, profiles[profile].speedMax);
+      targetSpeed = Math.max(targetSpeed, Math.min(24, maxSpeed-2));
       centerFlash("➤ Speed Up", 650);
-      s.position.z -= SEG_LEN*SEG_COUNT + 40 + Math.random()*40;
-      s.position.x = laneX();
+      s.position.z -= SEG_LEN*SEG_COUNT + 40 + Math.random()*40; s.userData.baseX = laneX();
     }
   });
 
-  // ramps -> jump
+  /* Ramps -> jump */
   ramps.forEach(r=>{
-    const box = {x:r.position.x, z:r.position.z, w:2.4, d:2.6};
+    const box = {x:r.userData.baseX + curveX(r.position.z), z:r.position.z, w:2.4, d:2.6};
     if(onGround && aabbIntersect(carBox, box)){
-      vy = 5.5; onGround = false;
-      centerFlash("⤴ Jump!", 500);
-      r.position.z -= SEG_LEN*SEG_COUNT + 40 + Math.random()*40;
-      r.position.x = laneX();
+      vy = 5.5; onGround = false; centerFlash("⤴ Jump!", 500);
+      r.position.z -= SEG_LEN*SEG_COUNT + 40 + Math.random()*40; r.userData.baseX = laneX();
     }
   });
 
-  // obstacles – gentle penalty + cooldown (ground only)
+  /* Obstacles */
   if(onGround){
     obstacles.forEach(o=>{
-      const box = {x:o.position.x, z:o.position.z, w:1.8, d:1.4};
+      const box = {x:(o.userData.baseX + Math.sin(now*0.002 + o.userData.phase)*o.userData.amp) + curveX(o.position.z), z:o.position.z, w:1.8, d:1.4};
       if(hitCooldown<=0 && aabbIntersect(carBox, box)){
-        targetSpeed = Math.max(minSpeed, targetSpeed - 3.5);
-        score = Math.max(0, score - 5);
+        targetSpeed = Math.max(minSpeed, targetSpeed - 3.5); score = Math.max(0, score - 5);
         centerFlash("🛑 Mr Samuels says: Watch it!", 650);
         o.position.z -= 8; hitCooldown = 0.8;
       }
     });
   }
 
-  // camera follow
-  camera.position.x = THREE.MathUtils.damp(camera.position.x, car.position.x * 0.45, 3, dt);
-  camera.position.z = THREE.MathUtils.damp(camera.position.z, car.position.z + 6, 3, dt);
-  camera.lookAt(car.position.x, 0.4, car.position.z - 6);
+  /* Tunnels trigger */
+  if(dist >= nextTunnelAt){
+    choosingTunnel=true; tunnelOverlay.style.display="flex";
+    document.querySelectorAll('.tunBtns .btn').forEach(b=>{
+      b.onclick=()=>{ applyProfile(b.dataset.tun); choosingTunnel=false; tunnelOverlay.style.display="none"; nextTunnelAt += 700; };
+    });
+  }
 
-  // HUD
-  hud.speed.textContent = Math.round(speed).toString();
-  hud.coins.textContent = coinsCount.toString();
-  hud.dist.textContent  = Math.floor(dist).toString();
-  hud.score.textContent = score.toString();
+  /* Camera follow */
+  camera.position.x = THREE.MathUtils.damp(camera.position.x, curveX(car.position.z) * 0.3 + car.position.x*0.45, 3, dt);
+  camera.position.z = THREE.MathUtils.damp(camera.position.z, car.position.z + 6, 3, dt);
+  camera.lookAt(car.position.x + curveX(car.position.z), 0.4, car.position.z - 6);
+
+  /* HUD */
+  hud.speed.textContent = String(Math.round(speed));
+  hud.coins.textContent = String(coinsCount);
+  hud.score.textContent = String(score);
 
   renderer.render(scene, camera);
 }
@@ -743,12 +770,10 @@ window.addEventListener("resize", ()=>{
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
-/* ---------- Prevent page scroll on mobile controls ---------- */
+/* ---------- Prevent scroll on touch controls ---------- */
 ["left","right","boost","brake"].forEach(id=>{
   const el = document.getElementById(id);
-  ["touchstart","touchmove","touchend"].forEach(ev=>{
-    el.addEventListener(ev, e=>e.preventDefault(), {passive:false});
-  });
+  ["touchstart","touchmove","touchend"].forEach(ev=> el.addEventListener(ev, e=>e.preventDefault(), {passive:false}) );
 });
 </script>
 </body>
