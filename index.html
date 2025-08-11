@@ -1,141 +1,755 @@
-from fpdf import FPDF
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1" />
+<title>Neon Drift: LOTF Racer + Quiz</title>
+<style>
+  :root{
+    --bg:#05060a; --panel:#0e1220; --accent:#00e5ff; --accent2:#ff2bd6; --text:#e7f6ff; --good:#22c55e; --bad:#ef4444;
+  }
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial}
+  #ui{
+    position:fixed; inset:0 0 auto 0; display:flex; gap:12px; align-items:center; padding:10px 12px;
+    background:linear-gradient(to bottom,rgba(0,0,0,.55),rgba(0,0,0,0));
+    user-select:none; -webkit-user-select:none; pointer-events:none; z-index:10;
+  }
+  .pill{pointer-events:auto; background:rgba(14,18,32,.6); border:1px solid #243056; border-radius:12px; padding:8px 10px; display:flex; gap:10px; align-items:center}
+  .stat{font-weight:700}
+  .btn{pointer-events:auto; background:var(--accent); border:none; color:#001018; font-weight:900; padding:10px 14px; border-radius:12px; cursor:pointer}
+  .btn.ghost{background:transparent;border:2px solid var(--accent);color:var(--text)}
+  #overlay, #review{
+    position:fixed; inset:0; display:none; align-items:center; justify-content:center;
+    background:rgba(0,0,0,.65); backdrop-filter: blur(4px); z-index:20;
+  }
+  .card{width:min(900px,92vw); max-height:84vh; overflow:auto; background:var(--panel); border:1px solid #26345e; border-radius:16px; padding:16px; box-shadow:0 20px 60px rgba(0,0,0,.45)}
+  .meta{display:flex;gap:10px;align-items:center;opacity:.9}
+  .timer{margin-left:auto;font-weight:900}
+  .answers{display:grid; gap:10px; margin-top:10px}
+  .answers button{border:none;border-radius:12px; padding:12px; font-weight:700; cursor:pointer}
+  .answers button:hover{filter:brightness(1.08)}
+  /* NEUTRAL option style (no reveal during quiz) */
+  .choice{background:rgba(14,18,32,.6); border:2px solid #243056; color:#e7f6ff}
+  #centerMsg{
+    position:fixed; left:50%; top:14%; transform:translateX(-50%); font-weight:900; letter-spacing:.5px;
+    background:rgba(14,18,32,.6); border:1px solid #243056; border-radius:12px; padding:8px 12px; display:none; z-index:15;
+  }
+  #pad{
+    position:fixed; right:14px; bottom:14px; display:grid; grid-template-columns:68px 68px; gap:10px;
+    opacity:.95; user-select:none; z-index:10;
+  }
+  .ctl{
+    background:rgba(14,18,32,.6); border:2px solid #2a3b6a; border-radius:14px; color:#cfe6ff; font-size:18px; font-weight:900;
+    display:flex; align-items:center; justify-content:center; height:60px; cursor:pointer
+  }
+  .ctl:active{transform:scale(.98); border-color:var(--accent)}
+  @media (min-width:880px){ #pad{display:none} }
+  #toast{
+    position:fixed; bottom:14px; left:50%; transform:translateX(-50%); background:#091022; color:#a8eaff;
+    border:1px solid #1d2a52; border-radius:12px; padding:8px 12px; display:none; z-index:15;
+  }
+  .qrow{border:1px solid #2a3b6a;border-radius:12px;padding:10px;margin:8px 0;background:#0b1428}
+  .qrow b{color:#bde3ff}
+  .correctTag{font-weight:700;color:#22c55e;margin-left:6px}
+  .wrongTag{font-weight:700;color:#ef4444;margin-left:6px}
+</style>
+</head>
+<body>
+<div id="ui">
+  <div class="pill"><span>Time:</span> <span class="stat" id="time">05:00</span></div>
+  <div class="pill"><span>Speed:</span> <span class="stat" id="speed">0</span></div>
+  <div class="pill"><span>Coins:</span> <span class="stat" id="coins">0</span></div>
+  <div class="pill"><span>Distance:</span> <span class="stat" id="dist">0</span> m</div>
+  <div class="pill"><span>Score:</span> <span class="stat" id="score">0</span></div>
+  <div class="pill"><span>Correct:</span> <span class="stat" id="correct">0</span></div>
+  <div class="pill"><span>Merits:</span> <span class="stat" id="merits">0</span></div>
+  <button class="btn ghost" id="pauseBtn" style="margin-left:auto">Pause</button>
+  <button class="btn" id="restartBtn">Restart</button>
+</div>
 
-# Assessment content for both grades
-assessment_title = "SPARK English Home Language\nTerm 3 Assessment\nReading & Viewing\n12 September 2025"
+<div id="centerMsg"></div>
+<div id="toast"></div>
 
-instructions = (
-    "INSTRUCTIONS:\n"
-    "- Answer all questions.\n"
-    "- Write neatly and legibly.\n"
-    "- Use full sentences unless otherwise instructed.\n"
-    "- Manage your time carefully.\n"
-    "- Total: 30 marks | Time: 40 minutes\n"
-)
+<!-- Quiz Overlay -->
+<div id="overlay">
+  <div class="card">
+    <div class="meta">
+      <h2 style="margin:0">Quiz: <em>Lord of the Flies</em></h2>
+      <div class="timer">⏱️ <span id="tLeft">10</span>s</div>
+    </div>
+    <div id="qText" style="margin-top:6px">Question here…</div>
+    <div class="answers" id="answers"></div>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <button class="btn ghost" id="skip">Skip</button>
+      <button class="btn" id="resume">Resume</button>
+    </div>
+  </div>
+</div>
 
-# Grade 9 assessment
-grade9_sections = [
-    {
-        "title": "SECTION A: Comprehension (15 marks)",
-        "text": (
-            "Read the passage below and answer the questions that follow.\n\n"
-            "PASSAGE: 'The River’s Gift'\n"
-            "For years, the people of Willowbend lived beside a river that provided water, food, and life. "
-            "One year, the rains failed, and the river shrank. A young boy, Sipho, began walking upstream "
-            "each day, clearing debris and planting trees along the banks. Soon, his quiet work attracted "
-            "the attention of his neighbours, who joined him. Months later, the river flowed stronger than "
-            "ever before.\n"
-        ),
-        "questions": [
-            "1.1 Where did the people of Willowbend live? (1)",
-            "1.2 What caused the river to shrink? (1)",
-            "1.3 Why did Sipho begin walking upstream each day? (2)",
-            "1.4 Explain the main idea of the passage in your own words. (3)",
-            "1.5 How did the community respond to Sipho’s actions? (2)",
-            "1.6 Write a synonym for ‘quiet’ from paragraph 1. (1)",
-            "1.7 Do you think one person can make a difference to the environment? Give a reason. (2)",
-            "1.8 Suggest a suitable title for this text and justify your choice. (3)"
-        ]
-    },
-    {
-        "title": "SECTION B: Visual Literacy (5 marks)",
-        "text": (
-            "Study the cartoon provided (teacher to insert) and answer the questions.\n"
-        ),
-        "questions": [
-            "2.1 What message is the cartoon trying to communicate? (2)",
-            "2.2 How has the artist used visual elements to draw attention to the main figure? (2)",
-            "2.3 Why do you think some characters in the cartoon are not taking action? (1)"
-        ]
-    },
-    {
-        "title": "SECTION C: Summary (10 marks)",
-        "text": (
-            "Write a 50–60 word summary of the passage ‘The River’s Gift’. Your summary must:\n"
-            "- Focus on the main ideas only.\n"
-            "- Be in your own words.\n"
-            "- Be written in full sentences.\n"
-        ),
-        "questions": []
+<!-- Review Overlay (end of 5 minutes) -->
+<div id="review">
+  <div class="card">
+    <div class="meta" style="margin-bottom:10px">
+      <h2 style="margin:0">Session Review (5 minutes)</h2>
+      <div style="margin-left:auto;font-weight:900">Merits: <span id="finalMerits">0</span></div>
+    </div>
+    <div id="reviewList"></div>
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button class="btn" id="playAgain">Play Again</button>
+      <button class="btn ghost" id="closeReview">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Mobile controls -->
+<div id="pad" aria-label="controls">
+  <div class="ctl" id="left">◀</div>
+  <div class="ctl" id="right">▶</div>
+  <div class="ctl" id="boost">BOOST</div>
+  <div class="ctl" id="brake">BRAKE</div>
+</div>
+
+<script type="module">
+import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
+
+const DPR = Math.min(2, window.devicePixelRatio || 1);
+
+/* ---------- Scene / Camera / Renderer ---------- */
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x05060a, 0.03);
+
+const camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.1, 2000);
+camera.position.set(0, 2.4, 6);
+
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setClearColor(0x05060a, 1);
+renderer.setPixelRatio(DPR);
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.appendChild(renderer.domElement);
+
+/* ---------- Lighting ---------- */
+const hemi = new THREE.HemisphereLight(0x1ae0ff, 0x090a12, 0.6);
+scene.add(hemi);
+const dir = new THREE.DirectionalLight(0xff2bd6, 0.7);
+dir.position.set(5, 8, 3);
+scene.add(dir);
+
+/* ---------- Track ---------- */
+const TRACK_WIDTH = 8;
+const SEG_LEN = 40;
+const SEG_COUNT = 12;
+const WALL_H = 5;
+const FLOOR_Y = 0;
+
+const neonMat = (c)=> new THREE.MeshStandardMaterial({
+  color: c, metalness: 0.4, roughness: 0.2, emissive: c, emissiveIntensity: 0.5
+});
+const darkMat = new THREE.MeshStandardMaterial({color:0x0b0f1c, metalness:0.2, roughness:0.9});
+const glowLaneMat = (c)=> new THREE.MeshBasicMaterial({color:c});
+
+/* Blood-red graffiti texture: "Mr Samuels ENG HL Grade 10 TM" */
+function makeGraffitiTexture(text="Mr Samuels ENG HL Grade 10 TM"){
+  const c = document.createElement("canvas");
+  c.width = 1024; c.height = 256;
+  const g = c.getContext("2d");
+  // dark wall with bricks
+  g.fillStyle = "#0b1020"; g.fillRect(0,0,c.width,c.height);
+  g.fillStyle = "#0e1428";
+  for(let x=0;x<c.width;x+=48){ for(let y=0;y<c.height;y+=24){ g.fillRect(x + (y%48?0:24), y, 44, 20); } }
+  // spray red style
+  g.font = "900 118px Impact, Arial Black, sans-serif";
+  g.textAlign="center";
+  g.translate(c.width/2, c.height/2 + 35);
+  g.rotate(-0.035);
+  // dark shadow
+  g.fillStyle = "#2b0004"; g.shadowColor="#ff2b2b"; g.shadowBlur=26;
+  g.fillText(text, 0, 0);
+  // thick outline
+  g.shadowBlur = 0; g.lineWidth = 12; g.strokeStyle = "#7a0000";
+  g.strokeText(text, 0, 0);
+  // blood red fill
+  const grd = g.createLinearGradient(-300,0,300,0);
+  grd.addColorStop(0,"#b00020"); grd.addColorStop(1,"#ff2b2b");
+  g.fillStyle = grd; g.fillText(text, 0, 0);
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(2,1);
+  tex.anisotropy = 8;
+  return tex;
+}
+const wallTex = makeGraffitiTexture();
+
+/* Build segments */
+const segments = [], wallsLeft=[], wallsRight=[], floors=[], laneStrips=[];
+const floorGeo = new THREE.PlaneGeometry(TRACK_WIDTH, SEG_LEN);
+const wallGeo  = new THREE.PlaneGeometry(SEG_LEN, WALL_H);
+const stripGeo = new THREE.PlaneGeometry(TRACK_WIDTH, 0.1);
+
+for (let i=0;i<SEG_COUNT;i++){
+  const group = new THREE.Group();
+
+  const floor = new THREE.Mesh(floorGeo, darkMat);
+  floor.rotation.x = -Math.PI/2;
+  floor.position.set(0, FLOOR_Y, -i*SEG_LEN);
+  group.add(floor); floors.push(floor);
+
+  const matL = new THREE.MeshStandardMaterial({color:0xffffff, map:wallTex, metalness:0.2, roughness:0.8});
+  const left = new THREE.Mesh(wallGeo, matL);
+  left.rotation.y = Math.PI/2; left.position.set(-TRACK_WIDTH/2, WALL_H/2, -i*SEG_LEN);
+  group.add(left); wallsLeft.push(left);
+
+  const matR = new THREE.MeshStandardMaterial({color:0xffffff, map:wallTex, metalness:0.2, roughness:0.8});
+  const right = new THREE.Mesh(wallGeo, matR);
+  right.rotation.y = -Math.PI/2; right.position.set(TRACK_WIDTH/2, WALL_H/2, -i*SEG_LEN);
+  group.add(right); wallsRight.push(right);
+
+  for(let s=0; s<SEG_LEN; s+=2){
+    const strip = new THREE.Mesh(stripGeo, glowLaneMat((s%4===0)?0xff2bd6:0x00e5ff));
+    strip.rotation.x = -Math.PI/2; strip.position.set(0, FLOOR_Y+0.01, -i*SEG_LEN - s);
+    group.add(strip); laneStrips.push(strip);
+  }
+
+  segments.push(group); scene.add(group);
+}
+
+/* ---------- Car (hover DeLorean vibe) ---------- */
+const car = new THREE.Group();
+// main body
+const body = new THREE.Mesh(
+  new THREE.BoxGeometry(1.6, 0.35, 3.0),
+  new THREE.MeshStandardMaterial({color:0x9aa4ac, metalness:0.8, roughness:0.25})
+);
+body.position.y = 0.45; car.add(body);
+// hood
+const hood = new THREE.Mesh(
+  new THREE.BoxGeometry(1.6, 0.2, 1.1),
+  new THREE.MeshStandardMaterial({color:0x8b949e, metalness:0.8, roughness:0.25})
+);
+hood.position.set(0,0.6,0.9); car.add(hood);
+// windscreen
+const canopy = new THREE.Mesh(
+  new THREE.BoxGeometry(1.2, 0.32, 0.9),
+  new THREE.MeshStandardMaterial({color:0x1b223a, emissive:0x1b223a, emissiveIntensity:0.4, metalness:0.6, roughness:0.2})
+);
+canopy.position.set(0,0.7,0.2); car.add(canopy);
+// light bars / flux glow
+const barGeo = new THREE.BoxGeometry(0.15,0.15,2.6);
+const leftBar = new THREE.Mesh(barGeo, neonMat(0x00e5ff)); leftBar.position.set(-0.9,0.35,0);
+const rightBar= new THREE.Mesh(barGeo, neonMat(0xff2bd6)); rightBar.position.set( 0.9,0.35,0);
+car.add(leftBar,rightBar);
+// wheels (hover rims)
+const wheelGeo = new THREE.CylinderGeometry(0.45,0.45,0.18,18);
+const wheelMat = new THREE.MeshStandardMaterial({color:0x0c111d, emissive:0x00e5ff, emissiveIntensity:0.25, metalness:0.7, roughness:0.4});
+function wheel(x,z){
+  const w = new THREE.Mesh(wheelGeo, wheelMat);
+  w.rotation.z = Math.PI/2; w.position.set(x,0.3,z);
+  const glow = new THREE.Mesh(new THREE.TorusGeometry(0.45,0.05,12,24), new THREE.MeshBasicMaterial({color:0x00e5ff}));
+  glow.position.set(x,0.3,z);
+  car.add(w,glow);
+}
+wheel(-0.85, 1.0); wheel(0.85, 1.0); wheel(-0.85,-1.0); wheel(0.85,-1.0);
+
+car.position.set(0, 0.2, 4);
+scene.add(car);
+
+/* ---------- Collectibles, Obstacles, Speedups, Ramps ---------- */
+const coins = [], boosts = [], obstacles = [], speedups = [], ramps = [];
+
+const coinGeo = new THREE.TorusGeometry(0.25, 0.09, 12, 24);
+const coinMat = new THREE.MeshStandardMaterial({color:0xffe066, emissive:0xffcc00, emissiveIntensity:0.7, metalness:0.3, roughness:0.4});
+
+const boostGeo = new THREE.BoxGeometry(TRACK_WIDTH*0.7, 0.05, 2);
+const boostMat = new THREE.MeshBasicMaterial({color:0x73ffb2});
+
+const obstacleGeo = new THREE.BoxGeometry(1.8, 1.2, 1.4);
+const obstacleLabelTex = (()=>{
+  const c = document.createElement("canvas"); c.width=512; c.height=256;
+  const g = c.getContext("2d");
+  const grd = g.createLinearGradient(0,0,c.width,0);
+  grd.addColorStop(0,"#0b1026"); grd.addColorStop(1,"#1a2550");
+  g.fillStyle = grd; g.fillRect(0,0,c.width,c.height);
+  g.strokeStyle = "#5bc0ff"; g.lineWidth=8; g.strokeRect(6,6,c.width-12,c.height-12);
+  g.font="bold 34px Inter, Arial"; g.fillStyle="#e7f6ff"; g.textAlign="center"; g.shadowColor="#00e5ff"; g.shadowBlur=16;
+  g.fillText("Mr Samuels – Grade 10 English ™", c.width/2, c.height/2 + 12);
+  const tex = new THREE.CanvasTexture(c); tex.anisotropy=8; return tex;
+})();
+const obstacleMat = new THREE.MeshStandardMaterial({
+  color:0xffffff, metalness:0.3, roughness:0.6, map:obstacleLabelTex, emissive:0x142042, emissiveIntensity:0.35
+});
+
+/* Speed-Up points (chevrons) */
+const speedupGeo = new THREE.ConeGeometry(0.35, 0.9, 16);
+const speedupMat = new THREE.MeshStandardMaterial({color:0x73fffb, emissive:0x00e5ff, emissiveIntensity:0.7, metalness:0.2, roughness:0.3});
+
+/* Ramps (simple prism block + sloped top) */
+function rampMesh(){
+  const geom = new THREE.BoxGeometry(2.4,0.2,2.6);
+  const mat = new THREE.MeshStandardMaterial({color:0x1935ff, emissive:0x1935ff, emissiveIntensity:0.3, metalness:0.2, roughness:0.6});
+  const ramp = new THREE.Mesh(geom, mat);
+  const slope = new THREE.Mesh(new THREE.BoxGeometry(2.4,0.1,2.6), new THREE.MeshStandardMaterial({color:0x00e5ff, emissive:0x00e5ff, emissiveIntensity:0.5}));
+  slope.position.y = 0.16; slope.rotation.x = -Math.PI*0.12;
+  ramp.add(slope);
+  return ramp;
+}
+
+const spawnPoolZ = -SEG_COUNT*SEG_LEN + 10;
+function randX(){ return (Math.random()*0.8-0.4) * (TRACK_WIDTH*0.8); }
+function laneX(){ const lanes=[-2.6,0,2.6]; return lanes[Math.floor(Math.random()*lanes.length)]; }
+
+function spawnCoin(z){
+  const m = new THREE.Mesh(coinGeo, coinMat);
+  m.position.set(randX(), 0.7, z);
+  m.userData.type = "coin";
+  scene.add(m); coins.push(m);
+}
+function spawnBoost(z){
+  const m = new THREE.Mesh(boostGeo, boostMat);
+  m.position.set(0, 0.03, z);
+  m.rotation.x = -Math.PI/2;
+  m.userData.type = "boost";
+  scene.add(m); boosts.push(m);
+}
+function spawnObstacle(z){
+  const m = new THREE.Mesh(obstacleGeo, obstacleMat);
+  m.position.set(laneX(), 0.6, z);
+  m.userData.type = "obstacle";
+  m.userData.baseX = m.position.x;
+  m.userData.phase = Math.random()*Math.PI*2;
+  m.userData.amp = 0.35 + Math.random()*0.35;   // gentler sway
+  scene.add(m); obstacles.push(m);
+}
+function spawnSpeedup(z){
+  const m = new THREE.Mesh(speedupGeo, speedupMat);
+  m.position.set(laneX(), 0.5, z);
+  m.rotation.x = Math.PI; // arrow backward
+  m.userData.type = "speedup";
+  scene.add(m); speedups.push(m);
+}
+function spawnRamp(z){
+  const m = rampMesh();
+  m.position.set(laneX(), 0.1, z);
+  m.userData.type = "ramp";
+  scene.add(m); ramps.push(m);
+}
+
+/* Sparse layout */
+for (let i=0;i<6;i++)  spawnCoin(spawnPoolZ + Math.random()*SEG_COUNT*SEG_LEN);
+for (let i=0;i<5;i++)  spawnBoost(spawnPoolZ + Math.random()*SEG_COUNT*SEG_LEN);
+for (let i=0;i<8;i++)  spawnObstacle(spawnPoolZ + Math.random()*SEG_COUNT*SEG_LEN);
+for (let i=0;i<6;i++)  spawnSpeedup(spawnPoolZ + Math.random()*SEG_COUNT*SEG_LEN);
+for (let i=0;i<5;i++)  spawnRamp(spawnPoolZ + Math.random()*SEG_COUNT*SEG_LEN);
+
+/* ---------- Game state ---------- */
+let running = true, pausedForQuiz = false;
+let tPrev = performance.now();
+/* Slower baseline speeds */
+let speed = 12, targetSpeed = 14, maxSpeed = 26, minSpeed = 6;
+
+let steer = 0;
+let dist = 0;
+let score = 0;
+let coinsCount = 0;
+let boostTimer = 0;
+let speedupTimer = 0;
+
+let correct = 0;
+let merits = 0;
+
+/* Session timer: 5 minutes (300s) */
+const SESSION_DURATION = 300;
+let sessionLeft = SESSION_DURATION; // seconds
+
+/* Jump physics */
+let vy = 0;               // vertical velocity
+const baseY = 0.2;        // hover baseline
+const gravity = -9.6;     // m/s^2 (scaled)
+let onGround = true;
+
+/* Quiz tracking for review */
+const askedLog = []; // {q, a[], correctIndex, chosenIndex|null, result}
+
+/* HUD handles */
+const hud = {
+  time: document.getElementById("time"),
+  speed: document.getElementById("speed"),
+  coins: document.getElementById("coins"),
+  dist:  document.getElementById("dist"),
+  score: document.getElementById("score"),
+  correct: document.getElementById("correct"),
+  merits: document.getElementById("merits"),
+};
+const overlay = document.getElementById("overlay");
+const qText = document.getElementById("qText");
+const answersEl = document.getElementById("answers");
+const tLeftEl = document.getElementById("tLeft");
+const centerMsg = document.getElementById("centerMsg");
+const toast = document.getElementById("toast");
+const review = document.getElementById("review");
+const reviewList = document.getElementById("reviewList");
+const finalMerits = document.getElementById("finalMerits");
+
+/* ---------- Input ---------- */
+const keys = {};
+window.addEventListener("keydown", e=>{ keys[e.key.toLowerCase()] = true; });
+window.addEventListener("keyup",   e=>{ keys[e.key.toLowerCase()] = false; });
+
+document.getElementById("left").addEventListener("pointerdown", ()=>keys["arrowleft"]=true);
+document.getElementById("right").addEventListener("pointerdown", ()=>keys["arrowright"]=true);
+document.getElementById("boost").addEventListener("pointerdown", ()=>keys[" "]=true);
+document.getElementById("brake").addEventListener("pointerdown", ()=>keys["shift"]=true);
+["left","right","boost","brake"].forEach(id=>{
+  document.getElementById(id).addEventListener("pointerup", ()=>{
+    if(id==="left") keys["arrowleft"]=false;
+    if(id==="right") keys["arrowright"]=false;
+    if(id==="boost") keys[" "]=false;
+    if(id==="brake") keys["shift"]=false;
+  });
+});
+
+/* ---------- Helpers ---------- */
+function aabbIntersect(a,b){
+  return (Math.abs(a.x-b.x) <= (a.w+b.w)*0.5) && (Math.abs(a.z-b.z) <= (a.d+b.d)*0.5);
+}
+function carAABB(){ return {x:car.position.x, z:car.position.z, w:1.6, d:2.6}; }
+function showToast(msg, ms=900){ toast.textContent = msg; toast.style.display = "block"; setTimeout(()=>toast.style.display="none", ms); }
+function centerFlash(msg, ms=800){ centerMsg.textContent = msg; centerMsg.style.display = "block"; setTimeout(()=>centerMsg.style.display="none", ms); }
+function fmtTime(s){ s=Math.max(0,Math.floor(s)); const m=String(Math.floor(s/60)).padStart(2,"0"); const sec=String(s%60).padStart(2,"0"); return `${m}:${sec}`; }
+
+/* ---------- Quiz (50 Qs, 10s timer, merits) ---------- */
+const QUIZ = [
+  {q:"Who is elected chief at the start?", a:["Jack","Piggy","Ralph","Simon"], c:2},
+  {q:"The conch symbolizes…", a:["Violence","Civilization & order","Hunting","Fear"], c:1},
+  {q:"Who represents rational/scientific thinking?", a:["Piggy","Jack","Roger","Percival"], c:0},
+  {q:"The 'beast' chiefly represents…", a:["A real animal","The boys’ inner savagery","A sea monster","A ghost"], c:1},
+  {q:"Leader of the hunters?", a:["Ralph","Roger","Jack","Simon"], c:2},
+  {q:"The 'Lord of the Flies' literally is…", a:["A skull","A pig’s head on a stake","A mask","A conch"], c:1},
+  {q:"Why is the signal fire important?", a:["Decoration","Rescue/connection to civilization","Warmth only","Cooking only"], c:1},
+  {q:"Simon dies during…", a:["A storm frenzy/dance","A quiet night","A boat trip","A meeting"], c:0},
+  {q:"The most sadistic boy is…", a:["Piggy","Ralph","Roger","Samneric"], c:2},
+  {q:"What happens to the conch?", a:["Kept safe","Lost at sea","Shatters with Piggy’s death","Turns gold"], c:2},
+  {q:"Painted masks allow boys to…", a:["See better","Hide identity & unleash savagery","Swim faster","Talk to adults"], c:1},
+  {q:"The boys are rescued when…", a:["A naval officer sees a fire","A plane lands","They build a raft","They are not rescued"], c:0},
+  {q:"Ralph’s main priority is…", a:["Hunting pigs","Shelters & keeping the fire","Swimming","Cave exploring"], c:1},
+  {q:"Piggy’s glasses symbolize…", a:["Wealth","Knowledge/technology & fire","Beauty","Friendship"], c:1},
+  {q:"The island initially appears as…", a:["A paradise/Garden of Eden","A city","A prison","A desert"], c:0},
+  {q:"Jack’s tribe hunts Ralph by…", a:["Setting the forest on fire","Debating","Singing","Sailing"], c:0},
+  {q:"Golding suggests human nature is…", a:["Naturally orderly","Easily corrupted/prone to savagery","Unchangingly good","Fixed by rules"], c:1},
+  {q:"Samneric are…", a:["Two leaders","Twins treated as one","Younger than Littluns","Adults"], c:1},
+  {q:"Who learns the 'beast' is a dead parachutist?", a:["Ralph","Simon","Roger","Jack"], c:1},
+  {q:"Piggy is killed by…", a:["A falling tree","A rock pushed by Roger","A spear","A snake"], c:1},
+  {q:"Ralph is associated most with…", a:["Order & leadership","Mysticism","Savage delight","Cowardice"], c:0},
+  {q:"Jack is associated most with…", a:["Democracy","Savage authority & hunting","Scientific method","Compassion"], c:1},
+  {q:"Simon represents…", a:["Pure evil","Spiritual insight/morality","Cunning politics","Cowardice"], c:1},
+  {q:"The signal fire going out signifies…", a:["Freedom","Loss of hope/civilization","Success","A feast"], c:1},
+  {q:"The sow’s head speaks to Simon as…", a:["A hallucination/truth about evil","A real demon","A rescue signal","A lullaby"], c:0},
+  {q:"Littluns mainly symbolize…", a:["Brute force","Innocence/vulnerability of society","Government","Technology"], c:1},
+  {q:"Roger’s character arc shows…", a:["Growing kindness","Increasing cruelty without restraint","Academic focus","Homesickness"], c:1},
+  {q:"The face paint functions as…", a:["Camouflage & loss of identity","Sunscreen","War honor","Tribal marriage"], c:0},
+  {q:"Ralph weeps at the end for…", a:["Lost glasses","The end of childhood & darkness of man","Lost boat","The island"], c:1},
+  {q:"Piggy’s real name is…", a:["Never given","Peter","Philip","Percival"], c:0},
+  {q:"Who suggests building shelters first?", a:["Ralph","Jack","Piggy","Roger"], c:0},
+  {q:"Why do the boys first start a fire?", a:["Cooking","Rescue signal","Warmth","Fun"], c:1},
+  {q:"What does the dead parachutist symbolize?", a:["External war intruding/irony of adult 'civilization'","A guardian spirit","A map","A rescue plan"], c:0},
+  {q:"Who destroys the conch?", a:["Roger (by the boulder)","Jack","Ralph","Simon"], c:0},
+  {q:"The 'dance' that kills Simon shows…", a:["Community care","Power of mob mentality","Scientific test","Religious worship only"], c:1},
+  {q:"Jack’s hunters let the fire go out because…", a:["They were hunting and careless","It rained","They slept","Piggy put it out"], c:0},
+  {q:"Which item starts the first signal fire?", a:["Matches","Piggy’s glasses","Flint","Magnifying glass"], c:1},
+  {q:"Percival Wemys Madison forgets…", a:["His name/address under trauma","How to swim","How to cook","How to read"], c:0},
+  {q:"The naval officer’s uniform symbolizes…", a:["Perfect goodness","Civilization’s own violence/hypocrisy","Magic","Nature"], c:1},
+  {q:"Castle Rock becomes…", a:["A playground","Ralph’s home","Jack’s fortress/power base","A dock"], c:2},
+  {q:"Ralph’s hair growing & irritation symbolize…", a:["Maturity and discomfort with savagery","Style","Wisdom","Health"], c:0},
+  {q:"Who remains loyal longest to Ralph?", a:["Roger","Samneric","Jack","Maurice"], c:1},
+  {q:"'The beast is us' best fits which boy?", a:["Simon","Jack","Piggy","Roger"], c:0},
+  {q:"The sow’s head is offered to…", a:["The beast","Ralph","The officer","The conch"], c:0},
+  {q:"Jack steals…", a:["The conch","Piggy’s glasses (for fire)","The parachute","The knife"], c:1},
+  {q:"When the conch shatters, it marks…", a:["Restoration of order","Total collapse of order","Start of feast","Rescue"], c:1},
+  {q:"Ralph’s leadership is chosen by…", a:["Combat","Vote by a group","Drawing lots","Adults"], c:1},
+  {q:"'Kill the beast! Cut his throat!' is…", a:["A rescue chant","A hunting/violence chant","A prayer","A rule"], c:1},
+  {q:"The first fire causes…", a:["Nothing","A runaway blaze and a missing boy","Immediate rescue","A feast"], c:1},
+  {q:"Golding’s main theme is…", a:["Technology saves all","Inherent darkness in human nature under weak constraints","Adults are flawless","Islands are safe"], c:1},
+  {q:"The mask makes Jack feel…", a:["Ashamed","Liberated from shame/self","Sleepy","Older"], c:1},
+];
+
+/* Randomise questions each restart */
+let quizOrder=[], quizPtr=0;
+function seedQuizOrder(){ quizOrder = [...Array(QUIZ.length).keys()]; shuffle(quizOrder); quizPtr=0; }
+function shuffle(arr){ for(let i=arr.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]]; } }
+function nextQuestionIndex(){ const idx=quizOrder[quizPtr]; quizPtr=(quizPtr+1)%QUIZ.length; if(quizPtr===0) shuffle(quizOrder); return idx; }
+
+/* Per-question 10s timer */
+let timerId=null; const QUESTION_TIME=10; let tLeft=QUESTION_TIME;
+function startTimer(onExpire){
+  clearInterval(timerId); tLeft=QUESTION_TIME; tLeftEl.textContent=tLeft.toString();
+  timerId=setInterval(()=>{ tLeft--; tLeftEl.textContent=tLeft.toString(); if(tLeft<=0){ clearInterval(timerId); onExpire(); } },1000);
+}
+
+/* Merits */
+function awardIfMerit(){ const target=Math.floor(correct/10); if(target>merits){ merits=target; hud.merits.textContent=merits.toString(); centerFlash(`🏅 Merit +1 (Total ${merits})`, 1200); } }
+
+/* Ask question (neutral options; no reveal) */
+function askQuestion(){
+  pausedForQuiz=true; overlay.style.display="flex"; answersEl.innerHTML="";
+  const idx = nextQuestionIndex();
+  const q = QUIZ[idx]; qText.textContent=q.q;
+
+  const order=[0,1,2,3]; shuffle(order);
+
+  order.forEach((optIndex)=>{
+    const b=document.createElement("button");
+    b.className="choice";                      // NEUTRAL style
+    b.textContent=q.a[optIndex];
+    b.onclick=()=>{ clearInterval(timerId);
+      const ok=(optIndex===q.c);
+      askedLog.push({q:q.q, a:q.a, correctIndex:q.c, chosenIndex:optIndex, result: ok?"correct":"wrong"});
+      if(ok){ correct++; score+=25; hud.correct.textContent=correct.toString(); awardIfMerit(); centerFlash("✅ Answer recorded", 700); }
+      else{ score=Math.max(0,score-5); centerFlash("📝 Answer recorded", 700); }
+      overlay.style.display="none"; pausedForQuiz=false;
+    };
+    b.oncontextmenu=(e)=>e.preventDefault();
+    answersEl.appendChild(b);
+  });
+
+  startTimer(()=>{
+    askedLog.push({q:q.q, a:q.a, correctIndex:q.c, chosenIndex:null, result:"timeout"});
+    score=Math.max(0,score-5); centerFlash("⌛ Time’s up!", 900); overlay.style.display="none"; pausedForQuiz=false;
+  });
+}
+document.getElementById("skip").onclick = ()=>{ clearInterval(timerId); overlay.style.display = "none"; pausedForQuiz = false; };
+document.getElementById("resume").onclick = ()=>{ clearInterval(timerId); overlay.style.display = "none"; pausedForQuiz = false; };
+
+/* ---------- Controls / Pause / Restart ---------- */
+document.getElementById("pauseBtn").onclick = ()=>{ running=!running; centerFlash(running?"▶ RESUME":"II PAUSED",800); };
+document.getElementById("restartBtn").onclick = reset;
+document.getElementById("playAgain").onclick = ()=>{ review.style.display="none"; reset(); };
+document.getElementById("closeReview").onclick = ()=>{ review.style.display="none"; };
+
+/* ---------- End of session review ---------- */
+function showReview(){
+  finalMerits.textContent = merits.toString();
+  reviewList.innerHTML = "";
+  if(askedLog.length===0){
+    const d=document.createElement("div"); d.textContent="No questions were asked this session."; reviewList.appendChild(d);
+  }else{
+    askedLog.forEach((item, i)=>{
+      const row = document.createElement("div"); row.className="qrow";
+      const correctAns = item.a[item.correctIndex];
+      const chosenAns = item.chosenIndex!=null ? item.a[item.chosenIndex] : "No answer";
+      const tag = item.result==="correct" ? `<span class="correctTag">✓ Correct</span>` :
+                 item.result==="wrong"   ? `<span class="wrongTag">✗ Wrong</span>` :
+                                           `<span class="wrongTag">⌛ Time</span>`;
+      row.innerHTML = `<div><b>Q${i+1}.</b> ${item.q} ${tag}</div>
+                       <div>Your answer: <b>${chosenAns}</b></div>
+                       <div>Correct answer: <b>${correctAns}</b></div>`;
+      reviewList.appendChild(row);
+    });
+  }
+  review.style.display = "flex";
+}
+
+/* ---------- Reset ---------- */
+function reset(){
+  running=true; pausedForQuiz=false; boostTimer=0; speedupTimer=0;
+  speed=12; targetSpeed=14; maxSpeed=26; dist=0; score=0; coinsCount=0;
+  correct=0; merits=0; hud.correct.textContent="0"; hud.merits.textContent="0";
+  vy=0; onGround=true; car.position.set(0,baseY,4);
+  sessionLeft = SESSION_DURATION; hud.time.textContent = fmtTime(sessionLeft);
+  askedLog.length = 0;
+  seedQuizOrder();
+
+  [...coins].forEach(c=>{ c.position.set(randX(), 0.7, -Math.random()*SEG_COUNT*SEG_LEN); });
+  [...boosts].forEach(b=>{ b.position.set(0, 0.03, -Math.random()*SEG_COUNT*SEG_LEN); });
+  [...speedups].forEach(s=>{ s.position.set(laneX(), 0.5, -Math.random()*SEG_COUNT*SEG_LEN); });
+  [...obstacles].forEach(o=>{
+    o.position.set(laneX(), 0.6, -Math.random()*SEG_COUNT*SEG_LEN);
+    o.userData.baseX = o.position.x; o.userData.phase = Math.random()*Math.PI*2;
+  });
+  [...ramps].forEach(r=>{ r.position.set(laneX(), 0.1, -Math.random()*SEG_COUNT*SEG_LEN); });
+  centerFlash("⟲ RESTART");
+}
+
+/* ---------- Main loop ---------- */
+let hitCooldown=0; // brief invulnerability after an obstacle hit
+function animate(now){
+  requestAnimationFrame(animate);
+  const dt = Math.min(0.05, (now - tPrev)/1000); tPrev = now;
+  hitCooldown = Math.max(0, hitCooldown - dt);
+
+  if(running && !pausedForQuiz){
+    sessionLeft -= dt;
+    if(sessionLeft <= 0){
+      sessionLeft = 0;
+      running = false;
+      hud.time.textContent = fmtTime(0);
+      showReview();
+    } else {
+      hud.time.textContent = fmtTime(sessionLeft);  // 5-min countdown
     }
-]
+  }
 
-# Grade 10 assessment (slightly more complex)
-grade10_sections = [
-    {
-        "title": "SECTION A: Comprehension (15 marks)",
-        "text": (
-            "Read the passage below and answer the questions that follow.\n\n"
-            "PASSAGE: 'Voices in the Wind'\n"
-            "In the small town of Linton, a wind farm stood as a symbol of progress. "
-            "But when repairs were delayed, the turbines stopped turning. A young woman, Amara, "
-            "began organising weekly clean-ups and repair drives. Her determination inspired engineers "
-            "and townspeople to volunteer their skills. Within weeks, the turbines spun again, "
-            "powering homes and schools.\n"
-        ),
-        "questions": [
-            "1.1 Where was the wind farm located? (1)",
-            "1.2 Why did the turbines stop working? (1)",
-            "1.3 How did Amara contribute to fixing the problem? (2)",
-            "1.4 What is the underlying message of the passage? (3)",
-            "1.5 Explain the role of the townspeople in the restoration. (2)",
-            "1.6 Provide a synonym for ‘determination’ from paragraph 1. (1)",
-            "1.7 Do you think renewable energy projects rely more on technology or community support? Justify. (2)",
-            "1.8 Suggest an alternative title for the passage and explain your choice. (3)"
-        ]
-    },
-    {
-        "title": "SECTION B: Visual Literacy (5 marks)",
-        "text": (
-            "Study the advert provided (teacher to insert) and answer the questions.\n"
-        ),
-        "questions": [
-            "2.1 What product or service is being advertised? (1)",
-            "2.2 How does the advert appeal to the audience’s emotions? (2)",
-            "2.3 Identify one persuasive technique used and explain its effect. (2)"
-        ]
-    },
-    {
-        "title": "SECTION C: Summary (10 marks)",
-        "text": (
-            "Write an 80–100 word summary of the passage ‘Voices in the Wind’. Your summary must:\n"
-            "- Capture all key points.\n"
-            "- Be in your own words.\n"
-            "- Be written in full sentences.\n"
-        ),
-        "questions": []
+  if(!running || pausedForQuiz) { renderer.render(scene, camera); return; }
+
+  // inputs
+  const steerLeft = keys["arrowleft"]||keys["a"];
+  const steerRight= keys["arrowright"]||keys["d"];
+  const boostKey  = keys[" "]||keys["arrowup"];
+  const brakeKey  = keys["shift"]||keys["arrowdown"];
+
+  if(steerLeft && !steerRight) steer = THREE.MathUtils.damp(steer, -1.0, 8, dt);
+  else if(steerRight && !steerLeft) steer = THREE.MathUtils.damp(steer,  1.0, 8, dt);
+  else steer = THREE.MathUtils.damp(steer, 0, 6, dt);
+
+  // speed model (slower baseline + temporary boosts)
+  if(boostKey) targetSpeed = Math.min(maxSpeed, targetSpeed + 6*dt);
+  if(brakeKey) targetSpeed = Math.max(minSpeed, targetSpeed - 15*dt);
+  if(boostTimer>0){ targetSpeed = Math.max(targetSpeed, maxSpeed); boostTimer -= dt; }
+  if(speedupTimer>0){ targetSpeed = Math.max(targetSpeed, maxSpeed-2); speedupTimer -= dt; }
+  speed = THREE.MathUtils.damp(speed, targetSpeed, 3, dt);
+
+  // lateral motion
+  car.position.x += steer * 5 * dt;
+  car.position.x = THREE.MathUtils.clamp(car.position.x, -TRACK_WIDTH/2+0.9, TRACK_WIDTH/2-0.9);
+
+  // jump / gravity
+  if(!onGround){
+    vy += gravity * dt;
+    car.position.y += vy * dt;
+    if(car.position.y <= baseY){
+      car.position.y = baseY; vy = 0; onGround = true;
     }
-]
+  }else{
+    const hover = Math.sin(now*0.004)*0.02; car.position.y = baseY + hover;
+  }
 
-# PDF generation
-class PDF(FPDF):
-    def header(self):
-        self.set_font('Arial', 'B', 14)
-        self.multi_cell(0, 8, assessment_title, align='C')
-        self.ln(5)
+  // world scroll
+  const moveZ = speed * dt;
+  dist += moveZ;
+  score = Math.floor(dist) + coinsCount*50 + Math.floor(speed*2);
+  segments.forEach((g)=>{
+    g.position.z += moveZ;
+    if(g.position.z > SEG_LEN) g.position.z -= SEG_LEN*SEG_COUNT;
+  });
 
-    def chapter(self, grade, sections):
-        self.set_font('Arial', 'B', 12)
-        self.cell(0, 8, f"Grade {grade}", ln=True)
-        self.ln(3)
-        self.set_font('Arial', '', 11)
-        self.multi_cell(0, 5, instructions)
-        for sec in sections:
-            self.ln(2)
-            self.set_font('Arial', 'B', 11)
-            self.multi_cell(0, 6, sec["title"])
-            self.set_font('Arial', '', 11)
-            self.multi_cell(0, 5, sec["text"])
-            for q in sec["questions"]:
-                self.multi_cell(0, 5, q)
+  // move & recycle
+  const scrollers = [...laneStrips, ...coins, ...boosts, ...wallsLeft, ...wallsRight, ...floors, ...obstacles, ...speedups, ...ramps];
+  scrollers.forEach(m=>{
+    m.position.z += moveZ;
+    if(m.userData && m.userData.type==="obstacle"){
+      m.position.x = m.userData.baseX + Math.sin(now*0.002 + m.userData.phase)*m.userData.amp;
+    }
+    if(m.position.z > 10){
+      let offset = SEG_LEN*SEG_COUNT;
+      if(m.userData && m.userData.type==="coin") offset += 50 + Math.random()*40; // sparse coins
+      if(m.userData && m.userData.type==="speedup") offset += 40 + Math.random()*40;
+      if(m.userData && m.userData.type==="ramp") offset += 40 + Math.random()*40;
+      m.position.z -= offset;
+      if(m.userData && (m.userData.type==="coin" || m.userData.type==="speedup" || m.userData.type==="ramp" || m.userData.type==="obstacle")){
+        m.position.x = laneX();
+        if(m.userData.type==="obstacle"){ m.userData.baseX = m.position.x; m.userData.phase = Math.random()*Math.PI*2; }
+      }
+      if(m.userData && m.userData.type==="boost"){ m.position.x = 0; }
+    }
+  });
 
-pdf = PDF()
-pdf.set_auto_page_break(auto=True, margin=15)
-pdf.add_page()
-pdf.chapter(9, grade9_sections)
-pdf.add_page()
-pdf.chapter(10, grade10_sections)
+  // walls slow
+  const edge = TRACK_WIDTH/2 - 1;
+  if(Math.abs(car.position.x) > edge){
+    targetSpeed = Math.max(minSpeed, targetSpeed - 6*dt);
+    car.position.x = THREE.MathUtils.clamp(car.position.x, -edge, edge);
+    centerFlash("⚡ WALL HIT – SLOW!", 250);
+  }
 
-# Save PDF
-pdf_path = "/mnt/data/Term3_Assessment_Reading_Viewing_12Sep2025.pdf"
-pdf.output(pdf_path)
-pdf_path
+  const carBox = carAABB();
+
+  // coin -> quiz
+  coins.forEach(c=>{
+    const box = {x:c.position.x, z:c.position.z, w:0.6, d:0.6};
+    if(aabbIntersect(carBox, box)){
+      coinsCount++; score += 10;
+      c.position.z -= SEG_LEN*SEG_COUNT + 50 + Math.random()*40;
+      c.position.x = randX();
+      showToast("🪙 Coin!");
+      askQuestion();
+    }
+  });
+
+  // boosts (floor bars) -> hard boost
+  boosts.forEach(b=>{
+    const box = {x:b.position.x, z:b.position.z, w:TRACK_WIDTH*0.7, d:1.8};
+    if(aabbIntersect(carBox, box)){
+      boostTimer = 2.5; maxSpeed = 32;
+      targetSpeed = Math.max(targetSpeed, 28);
+      centerFlash("🚀 BOOST +", 650);
+      b.position.z -= SEG_LEN*SEG_COUNT;
+    }
+  });
+
+  // speed-up points (chevrons)
+  speedups.forEach(s=>{
+    const box = {x:s.position.x, z:s.position.z, w:0.8, d:0.9};
+    if(aabbIntersect(carBox, box)){
+      speedupTimer = 4.0;
+      maxSpeed = Math.max(maxSpeed, 28);
+      targetSpeed = Math.max(targetSpeed, 24);
+      centerFlash("➤ Speed Up", 650);
+      s.position.z -= SEG_LEN*SEG_COUNT + 40 + Math.random()*40;
+      s.position.x = laneX();
+    }
+  });
+
+  // ramps -> jump
+  ramps.forEach(r=>{
+    const box = {x:r.position.x, z:r.position.z, w:2.4, d:2.6};
+    if(onGround && aabbIntersect(carBox, box)){
+      vy = 5.5; onGround = false;
+      centerFlash("⤴ Jump!", 500);
+      r.position.z -= SEG_LEN*SEG_COUNT + 40 + Math.random()*40;
+      r.position.x = laneX();
+    }
+  });
+
+  // obstacles – gentle penalty + cooldown (ground only)
+  if(onGround){
+    obstacles.forEach(o=>{
+      const box = {x:o.position.x, z:o.position.z, w:1.8, d:1.4};
+      if(hitCooldown<=0 && aabbIntersect(carBox, box)){
+        targetSpeed = Math.max(minSpeed, targetSpeed - 3.5);
+        score = Math.max(0, score - 5);
+        centerFlash("🛑 Mr Samuels says: Watch it!", 650);
+        o.position.z -= 8; hitCooldown = 0.8;
+      }
+    });
+  }
+
+  // camera follow
+  camera.position.x = THREE.MathUtils.damp(camera.position.x, car.position.x * 0.45, 3, dt);
+  camera.position.z = THREE.MathUtils.damp(camera.position.z, car.position.z + 6, 3, dt);
+  camera.lookAt(car.position.x, 0.4, car.position.z - 6);
+
+  // HUD
+  hud.speed.textContent = Math.round(speed).toString();
+  hud.coins.textContent = coinsCount.toString();
+  hud.dist.textContent  = Math.floor(dist).toString();
+  hud.score.textContent = score.toString();
+
+  renderer.render(scene, camera);
+}
+reset();
+requestAnimationFrame(animate);
+
+/* ---------- Resize ---------- */
+window.addEventListener("resize", ()=>{
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+/* ---------- Prevent page scroll on mobile controls ---------- */
+["left","right","boost","brake"].forEach(id=>{
+  const el = document.getElementById(id);
+  ["touchstart","touchmove","touchend"].forEach(ev=>{
+    el.addEventListener(ev, e=>e.preventDefault(), {passive:false});
+  });
+});
+</script>
+</body>
+</html>
