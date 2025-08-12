@@ -22,7 +22,6 @@
   #overlay, #review, #settings{position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,10,30,.45); backdrop-filter: blur(4px); z-index:20;}
   .card{width:min(980px,94vw); max-height:84vh; overflow:auto; background:var(--panel); border:1px solid #2a3b6a; border-radius:16px; padding:16px; box-shadow:0 20px 60px rgba(0,0,0,.25)}
   .meta{display:flex;gap:10px;align-items:center;opacity:.95}
-  .timer{margin-left:auto;font-weight:900}
   .answers{display:grid; gap:10px; margin-top:10px}
   .answers button{border:none;border-radius:12px; padding:14px; font-weight:800; cursor:pointer}
   .choice{background:rgba(18,31,64,.9); border:2px solid #2a3b6a; color:#e7f6ff}
@@ -138,7 +137,7 @@
 import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
 const DPR = Math.min(2, window.devicePixelRatio || 1);
 
-/* ---------- Scene / Camera / Renderer (lighter) ---------- */
+/* ---------- Scene / Camera / Renderer ---------- */
 const scene = new THREE.Scene();
 scene.fog = new THREE.FogExp2(0x1a2a55, 0.012);
 const camera = new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.1, 2200);
@@ -149,7 +148,7 @@ renderer.setPixelRatio(DPR);
 renderer.setSize(innerWidth, innerHeight);
 document.body.appendChild(renderer.domElement);
 
-/* ---------- Lighting (brighter) ---------- */
+/* ---------- Lighting ---------- */
 scene.add(new THREE.HemisphereLight(0x8fd9ff, 0x101a33, 1.0));
 const dir  = new THREE.DirectionalLight(0xffffff, 0.8); dir.position.set(6,10,4); scene.add(dir);
 const fill = new THREE.PointLight(0x89f0ff, 0.9, 80); fill.position.set(0,6,0); scene.add(fill);
@@ -208,7 +207,7 @@ const billboards=[]; for(let i=0;i<8;i++) billboards.push(addBillboard(-i*SEG_LE
 let curveAmp=2.0, curveFreq=0.012, curvePhase=0;
 const curveX = z => curveAmp * Math.sin(curveFreq * (z + curvePhase));
 
-/* Car (no bob, no sway) */
+/* Car (no bob) */
 const car=new THREE.Group();
 const body=new THREE.Mesh(new THREE.BoxGeometry(1.6,0.35,3.0), new THREE.MeshStandardMaterial({color:0xd6dde6, metalness:0.7, roughness:0.25}));
 body.position.y=0.45; car.add(body);
@@ -226,7 +225,7 @@ function wheel(x,z){ const w=new THREE.Mesh(wheelGeo,wheelMat); w.rotation.z=Mat
 wheel(-0.85,1.0); wheel(0.85,1.0); wheel(-0.85,-1.0); wheel(0.85,-1.0);
 car.position.set(0,0.22,4); scene.add(car);
 
-/* Items (no coins at all) */
+/* Items (no coins) */
 const boosts=[], obstacles=[], speedups=[], ramps=[];
 const boostGeo=new THREE.BoxGeometry(TRACK_WIDTH*0.7,0.05,2);
 const boostMat=new THREE.MeshBasicMaterial({color:0x73ffb2});
@@ -245,12 +244,11 @@ function rampMesh(){ const geom=new THREE.BoxGeometry(2.4,0.2,2.6);
   slope.position.y=0.16; slope.rotation.x=-Math.PI*0.12; ramp.add(slope); return ramp;
 }
 
-/* Tunnel portals (2–3 choices) */
+/* Tunnels (2–3 choices) */
 const tunnels=[];
 const portalGeo=new THREE.TorusGeometry(1.3,0.18,12,40,Math.PI);
 const portalMats={easy:neonMat(0x66ffea), standard:neonMat(0x00e5ff), hard:neonMat(0xff7a00)};
 const lanes=[-2.6,0,2.6];
-
 function makeTunnelGroup(z){
   const g=new THREE.Group(); g.userData={type:"tunnels", used:false};
   const count=(Math.random()<0.5)?2:3;
@@ -263,13 +261,12 @@ function makeTunnelGroup(z){
     const plate=new THREE.Mesh(new THREE.BoxGeometry(1.6,0.08,0.6), new THREE.MeshStandardMaterial({color:0x12224c, emissive:0x12224c}));
     plate.position.set(0,-0.9,0); p.add(plate); g.add(p);
   }
-  scene.add(g); g.position.z=z; tunnels.push(g); return g;
+  scene.add(g); g.position.z=z; tunnels.push(g);
 }
 
 /* Spawners */
 const spawnPoolZ = -SEG_COUNT*SEG_LEN + 10;
 const laneX = ()=> lanes[(Math.random()*lanes.length)|0];
-
 for (let i=0;i<5;i++){ const m=new THREE.Mesh(boostGeo,boostMat); m.position.set(0,0.03, spawnPoolZ + Math.random()*SEG_COUNT*SEG_LEN); m.rotation.x=-Math.PI/2; m.userData={type:"boost"}; scene.add(m); boosts.push(m); }
 for (let i=0;i<8;i++){ const m=new THREE.Mesh(obstacleGeo,obstacleMat); m.position.set(laneX(),0.6, spawnPoolZ + Math.random()*SEG_COUNT*SEG_LEN); m.userData={type:"obstacle", baseX:m.position.x, phase:Math.random()*Math.PI*2, amp:0.35+Math.random()*0.35}; scene.add(m); obstacles.push(m); }
 for (let i=0;i<6;i++){ const m=new THREE.Mesh(speedupGeo,speedupMat); m.position.set(laneX(),0.5, spawnPoolZ + Math.random()*SEG_COUNT*SEG_LEN); m.rotation.x=Math.PI; m.userData={type:"speedup", baseX:m.position.x}; scene.add(m); speedups.push(m); }
@@ -296,16 +293,15 @@ let boostTimer=0, speedupTimer=0;
 let correct=0, merits=0, wallHitCooldown=0;
 
 /* Lane snap */
-let laneIndex=1;                   // 0:left, 1:middle, 2:right
-const laneChange=(dir)=>{ laneIndex = THREE.MathUtils.clamp(laneIndex + dir, 0, 2); };
-addEventListener("keydown",(e)=>{
-  const k=e.key.toLowerCase();
-  if(e.repeat) return;
-  if(k==="arrowleft"||k==="a") laneChange(-1);
-  if(k==="arrowright"||k==="d") laneChange(+1);
+let laneIndex=1; // 0 left, 1 mid, 2 right
+const keyState={};
+addEventListener("keydown",e=>{ const k=e.key.toLowerCase(); if(keyState[k]) return; keyState[k]=true;
+  if(k==="arrowleft"||k==="a") laneIndex=Math.max(0, laneIndex-1);
+  if(k==="arrowright"||k==="d") laneIndex=Math.min(2, laneIndex+1);
 });
-document.getElementById("left").addEventListener("pointerdown", ()=>laneChange(-1));
-document.getElementById("right").addEventListener("pointerdown",()=>laneChange(+1));
+addEventListener("keyup",e=>{ keyState[e.key.toLowerCase()]=false; });
+document.getElementById("left").addEventListener("pointerdown", ()=> laneIndex=Math.max(0, laneIndex-1));
+document.getElementById("right").addEventListener("pointerdown",()=> laneIndex=Math.min(2, laneIndex+1));
 
 /* Timer */
 const SESSION_DURATION=300; let sessionLeft=SESSION_DURATION;
@@ -326,15 +322,18 @@ function applyProfile(p){
   maxSpeed=profiles[p].speedMax; profile=p;
   centerFlash({easy:"🌴 Neon Paradise",standard:"🌆 Pulse District",hard:"🔥 Chaos Core"}[p]+" engaged",900);
 }
-let nextTunnelAt=700 + Math.random()*200;
 
-/* Quiz (every 500 m) */
-const QUIZ=[/* … (keep your 50 items here unchanged) … */];
+/* Quiz every 500 m */
+const QUIZ=[
+  {q:"Who is elected chief at the start?", a:["Jack","Piggy","Ralph","Simon"], c:2},
+  /* … keep the rest of your 50 Qs here unchanged … */
+];
 let quizOrder=[],quizPtr=0;
 function seedQuizOrder(){ quizOrder=[...Array(QUIZ.length).keys()]; for(let i=quizOrder.length-1;i>0;i--){const j=(Math.random()*(i+1))|0; [quizOrder[i],quizOrder[j]]=[quizOrder[j],quizOrder[i]];} quizPtr=0; }
 function nextQuestionIndex(){ const idx=quizOrder[quizPtr]; quizPtr=(quizPtr+1)%QUIZ.length; if(quizPtr===0) seedQuizOrder(); return idx; }
 let timerId=null; const QUESTION_TIME=10; let tLeft=QUESTION_TIME;
-const $=(id)=>document.getElementById(id);
+
+const $=id=>document.getElementById(id);
 const hud={time:$("time"),speed:$("speed"),distM:$("distM"),distKm:$("distKm"),score:$("score"),correct:$("correct"),merits:$("merits")};
 const overlay=$("overlay"), qText=$("qText"), answersEl=$("answers"), tLeftEl=$("tLeft"), centerMsg=$("centerMsg"), toast=$("toast"), review=$("review"), reviewList=$("reviewList"), finalMerits=$("finalMerits");
 function startTimer(onExpire){ clearInterval(timerId); tLeft=QUESTION_TIME; tLeftEl.textContent=String(tLeft);
@@ -359,7 +358,7 @@ function askQuestion(){
 $("skip").onclick=()=>{ clearInterval(timerId); overlay.style.display="none"; pausedForQuiz=false; };
 $("resume").onclick=()=>{ clearInterval(timerId); overlay.style.display="none"; pausedForQuiz=false; };
 
-/* Leaderboard & Settings (unchanged from last version) */
+/* Leaderboard & Settings */
 const LB_KEY="nd_lotf_leaderboard_v2";
 const getLB=()=>{try{return JSON.parse(localStorage.getItem(LB_KEY)||"[]")}catch(_){return[]}};
 const setLB=(list)=>localStorage.setItem(LB_KEY, JSON.stringify(list.slice(0,10)));
@@ -385,28 +384,47 @@ $("saveScore").onclick = ()=>{
   lb.sort((a,b)=>b.score-a.score); setLB(lb); renderLeaderboard(); centerFlash("💾 Saved to leaderboard",800);
 };
 
-/* Pause/Restart */
+/* Pause/Restart & Review */
 $("pauseBtn").onclick=()=>{ running=!running; centerFlash(running?"▶ RESUME":"II PAUSED",800); };
 $("restartBtn").onclick=reset;
 $("playAgain").onclick=()=>{ review.style.display="none"; reset(); };
 $("closeReview").onclick=()=>{ review.style.display="none"; };
 
+function showReview(){
+  finalMerits.textContent=String(merits);
+  reviewList.innerHTML="";
+  askedLog.forEach((item,i)=>{
+    const row=document.createElement("div"); row.className="qrow";
+    const chosen=item.chosenIndex!=null ? item.a[item.chosenIndex] : "No answer";
+    const correctAns=item.a[item.correctIndex];
+    const tag=item.result==="correct" ? `<span class="correctTag">✓ Correct</span>` :
+               item.result==="wrong"   ? `<span class="wrongTag">✗ Wrong</span>` :
+                                         `<span class="wrongTag">⌛ Time</span>`;
+    row.innerHTML=`<div><b>Q${i+1}.</b> ${item.q} ${tag}</div>
+                   <div>Your answer: <b>${chosen}</b></div>
+                   <div>Correct answer: <b>${correctAns}</b></div>`;
+    reviewList.appendChild(row);
+  });
+  $("playerName").value=getDefaultName();
+  $("playerClass").value=getDefaultClass();
+  renderLeaderboard(); review.style.display="flex";
+}
+
 /* Helpers */
 const aabbIntersect=(a,b)=> (Math.abs(a.x-b.x) <= (a.w+b.w)*0.5) && (Math.abs(a.z-b.z) <= (a.d+b.d)*0.5);
-const carAABB=()=> ({x:car.position.x + curveX(car.position.z), z:car.position.z, w:1.6, d:2.6});
-const centerFlash=(m,ms=800)=>{ centerMsg.textContent=m; centerMsg.style.display="block"; setTimeout(()=>centerMsg.style.display="none",ms); };
 const fmtTime=s=>{ s=Math.max(0,Math.floor(s)); const m=String(Math.floor(s/60)).padStart(2,"0"); const sec=String(s%60).padStart(2,"0"); return `${m}:${sec}`; };
 
 /* Reset */
-let nextQuestionAt = 500; // meters
+let nextTunnelAt=700 + Math.random()*200;
+let nextQuestionAt=500;
 function reset(){
   running=true; pausedForQuiz=false; boostTimer=0; speedupTimer=0;
   speed=12; targetSpeed=16; maxSpeed=profiles[profile].speedMax; dist=0; baseScore=0; bonusScore=0; score=0;
-  correct=0; merits=0; wallHitCooldown=0; laneIndex=1; nextQuestionAt=500;
-  hud.correct.textContent="0"; hud.merits.textContent="0";
-  vy=0; onGround=true; car.position.set(lanes[laneIndex],baseY,4);
-  sessionLeft=SESSION_DURATION; hud.time.textContent=fmtTime(sessionLeft);
-  askedLog.length=0; seedQuizOrder(); applyProfile("standard"); nextTunnelAt=700 + Math.random()*200;
+  correct=0; merits=0; wallHitCooldown=0; laneIndex=1; nextQuestionAt=500; nextTunnelAt=700 + Math.random()*200;
+  $("correct").textContent="0"; $("merits").textContent="0";
+  vy=0; onGround=true; car.position.set(0,baseY,4); // X set in animate each frame with curve
+  sessionLeft=SESSION_DURATION; $("time").textContent=fmtTime(sessionLeft);
+  askedLog.length=0; seedQuizOrder(); applyProfile("standard");
 
   boosts.forEach(b=>{ b.position.set(0,0.03, -Math.random()*SEG_COUNT*SEG_LEN); });
   speedups.forEach(s=>{ s.userData.baseX=laneX(); s.position.set(0.0,0.5, -Math.random()*SEG_COUNT*SEG_LEN); });
@@ -417,7 +435,7 @@ function reset(){
   centerFlash("⟲ RESTART");
 }
 
-/* Main loop */
+/* ---------- Main loop (car follows curve; no sway) ---------- */
 let hitCooldown=0;
 function animate(now){
   requestAnimationFrame(animate);
@@ -428,40 +446,30 @@ function animate(now){
   if(running && !pausedForQuiz){
     sessionLeft -= dt;
     if(sessionLeft<=0){
-      sessionLeft=0; running=false; hud.time.textContent=fmtTime(0);
+      sessionLeft=0; running=false; $("time").textContent=fmtTime(0);
       const lb=getLB(); lb.push({name:getDefaultName(), classTag:getDefaultClass(), score, correct, distM:Math.floor(dist), distKm:dist/1000, merits, t:Date.now()});
       lb.sort((a,b)=>b.score-a.score); setLB(lb);
       showReview();
-    } else hud.time.textContent=fmtTime(sessionLeft);
+    } else $("time").textContent=fmtTime(sessionLeft);
   }
   if(!running || pausedForQuiz){ renderer.render(scene,camera); return; }
 
-  /* Lane snap: place car exactly on the lane each frame */
-  car.position.x = lanes[laneIndex];
+  /* Place car exactly on lane + curve (key sway fix) */
+  car.position.x = curveX(car.position.z) + lanes[laneIndex];
 
-  /* Speed control */
-  if((window.keyBoost)||false); // placeholder
-  const boostKey = (window.keyBoost = (window.keyBoost||false)) || (window.keyBoost=false);
-  const keysDown = (e)=>{};
-  if((keysDown,false)); // silence linter
-  // keyboard handled by laneChange; only boost/brake below via keys
-  const keys = {};
-  addEventListener("keydown", e=>{ keys[e.key.toLowerCase()] = true; });
-  addEventListener("keyup",   e=>{ keys[e.key.toLowerCase()] = false; });
-  const boostHeld = keys[" "]||keys["arrowup"];
-  const brakeHeld = keys["shift"]||keys["arrowdown"];
-  if(boostHeld) targetSpeed = Math.min(maxSpeed, targetSpeed + 8*dt);
-  if(brakeHeld) targetSpeed = Math.max(minSpeed, targetSpeed - 18*dt);
+  /* Boost/brake */
+  if(keyState[" "]||keyState["arrowup"]) targetSpeed = Math.min(maxSpeed, targetSpeed + 8*dt);
+  if(keyState["shift"]||keyState["arrowdown"]) targetSpeed = Math.max(minSpeed, targetSpeed - 18*dt);
   if(boostTimer>0){ targetSpeed = Math.max(targetSpeed, maxSpeed); boostTimer -= dt; }
   if(speedupTimer>0){ targetSpeed = Math.max(targetSpeed, maxSpeed-2); speedupTimer -= dt; }
   speed = THREE.MathUtils.damp(speed, targetSpeed, 6, dt);
 
-  /* Jump physics (no idle bob) */
+  /* Jump (no idle bob) */
   if(!onGround){ vy += gravity*dt; car.position.y += vy*dt; if(car.position.y<=baseY){ car.position.y=baseY; vy=0; onGround=true; } }
 
   /* World scroll */
   const moveZ = speed*dt;
-  dist += moveZ; hud.distM.textContent=String(Math.floor(dist)); hud.distKm.textContent=(dist/1000).toFixed(2);
+  dist += moveZ; $("distM").textContent=String(Math.floor(dist)); $("distKm").textContent=(dist/1000).toFixed(2);
   baseScore = Math.floor(dist) + Math.floor(speed*2);
   score = baseScore + bonusScore;
   curvePhase += moveZ*20;
@@ -469,14 +477,14 @@ function animate(now){
   segments.forEach(g=>{ g.position.z += moveZ; g.position.x = curveX(g.position.z); if(g.position.z>SEG_LEN){ g.position.z -= SEG_LEN*SEG_COUNT; } });
   billboards.forEach(b=>{ b.position.z += moveZ; b.position.x = (b.position.x<0?-1:1)*(TRACK_WIDTH/2-0.6) + curveX(b.position.z); if(b.position.z>20) b.position.z -= SEG_LEN*SEG_COUNT*1.7; });
 
-  /* Move items/recycle */
+  /* Move items/recycle (object X already includes curve when we compute boxes) */
   boosts.forEach(b=>{ b.position.z += moveZ; b.position.x = curveX(b.position.z); if(b.position.z>12){ b.position.z -= SEG_LEN*SEG_COUNT; } });
   speedups.forEach(s=>{ s.position.z += moveZ; s.position.x = s.userData.baseX + curveX(s.position.z); if(s.position.z>12){ s.position.z -= SEG_LEN*SEG_COUNT + 40 + Math.random()*40; s.userData.baseX=laneX(); } });
   ramps.forEach(r=>{ r.position.z += moveZ; r.position.x = r.userData.baseX + curveX(r.position.z); if(r.position.z>12){ r.position.z -= SEG_LEN*SEG_COUNT + 40 + Math.random()*40; r.userData.baseX=laneX(); } });
   obstacles.forEach(o=>{ o.position.z += moveZ; const base=o.userData.baseX + Math.sin(now*0.002 + o.userData.phase)*o.userData.amp; o.position.x = base + curveX(o.position.z);
     if(o.position.z>12){ o.position.z -= SEG_LEN*SEG_COUNT; o.userData.baseX=laneX(); o.userData.phase=Math.random()*Math.PI*2; } });
 
-  /* Tunnel portals (drive-through) */
+  /* Tunnels */
   tunnels.forEach(t=>{
     t.position.z += moveZ; t.children.forEach(p=> p.position.x = p.userData.baseX + curveX(t.position.z));
     if(t.position.z>12){
@@ -491,8 +499,8 @@ function animate(now){
       }
     }
   });
-  // select portal on overlap
-  const carBox={x:car.position.x + curveX(car.position.z), z:car.position.z, w:1.6, d:2.6};
+  // choose portal on overlap
+  const carBox={x:car.position.x, z:car.position.z, w:1.6, d:2.6}; // world X (no extra curve)
   tunnels.forEach(t=>{
     if(t.userData.used) return;
     for(const p of t.children){
@@ -501,18 +509,19 @@ function animate(now){
     }
   });
 
-  /* Walls + obstacles */
+  /* Walls & obstacles — clamp using local X (car minus curve) */
   const edge=TRACK_WIDTH/2 - 1;
-  const carGlobalX=car.position.x + curveX(car.position.z);
-  if(Math.abs(carGlobalX)>edge){
+  const carLocalX = car.position.x - curveX(car.position.z);
+  if(Math.abs(carLocalX)>edge){
     targetSpeed = Math.max(minSpeed, targetSpeed - 10*dt);
-    car.position.x = THREE.MathUtils.clamp(car.position.x, -edge - curveX(car.position.z), edge - curveX(car.position.z));
+    const clamped = THREE.MathUtils.clamp(carLocalX, -edge, edge);
+    car.position.x = curveX(car.position.z) + clamped;
     if(wallHitCooldown<=0){ centerFlash("⚡ WALL HIT – SLOW!", 300); wallHitCooldown=0.4; }
   }
 
   if(onGround){
     obstacles.forEach(o=>{
-      const box={x:(o.userData.baseX + Math.sin(now*0.002 + o.userData.phase)*o.userData.amp) + curveX(o.position.z), z:o.position.z, w:1.8, d:1.4};
+      const box={x:o.position.x, z:o.position.z, w:1.8, d:1.4}; // world coords
       if(hitCooldown<=0 && aabbIntersect(carBox, box)){
         targetSpeed=Math.max(minSpeed, targetSpeed - 4.5); bonusScore=Math.max(0, bonusScore - 5);
         centerFlash("🛑 Mr Samuels says: Watch it!",650); o.position.z -= 8; hitCooldown=0.8;
@@ -526,46 +535,25 @@ function animate(now){
     askQuestion();
   }
 
-  /* Camera (direct follow; no sway) */
-  camera.position.x = car.position.x*0.55 + curveX(car.position.z)*0.2;
+  /* Camera follows world X directly (no extra curve added) */
+  camera.position.x = car.position.x*0.55;
   camera.position.z = car.position.z + 6;
-  camera.lookAt(car.position.x + curveX(car.position.z), 0.45, car.position.z - 6);
+  camera.lookAt(car.position.x, 0.45, car.position.z - 6);
 
-  hud.speed.textContent=String(Math.round(speed));
-  hud.score.textContent=String(score);
+  $("speed").textContent=String(Math.round(speed));
+  $("score").textContent=String(score);
 
   renderer.render(scene, camera);
 }
 reset();
 requestAnimationFrame(animate);
 
-/* Resize & prevent scroll on touch controls */
+/* Resize & touch scroll block */
 addEventListener("resize", ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
 ["left","right","boost","brake"].forEach(id=>{
   const el=document.getElementById(id);
   ["touchstart","touchmove","touchend"].forEach(ev=> el.addEventListener(ev, e=>e.preventDefault(), {passive:false}));
 });
-
-/* Review helpers */
-function showReview(){
-  finalMerits.textContent=String(merits);
-  reviewList.innerHTML="";
-  askedLog.forEach((item,i)=>{
-    const row=document.createElement("div"); row.className="qrow";
-    const chosen=item.chosenIndex!=null ? item.a[item.chosenIndex] : "No answer";
-    const correctAns=item.a[item.correctIndex];
-    const tag=item.result==="correct" ? `<span class="correctTag">✓ Correct</span>` :
-               item.result==="wrong"   ? `<span class="wrongTag">✗ Wrong</span>` :
-                                         `<span class="wrongTag">⌛ Time</span>`;
-    row.innerHTML = `<div><b>Q${i+1}.</b> ${item.q} ${tag}</div>
-                     <div>Your answer: <b>${chosen}</b></div>
-                     <div>Correct answer: <b>${correctAns}</b></div>`;
-    reviewList.appendChild(row);
-  });
-  document.getElementById("playerName").value=getDefaultName();
-  document.getElementById("playerClass").value=getDefaultClass();
-  renderLeaderboard(); review.style.display="flex";
-}
 </script>
 </body>
 </html>
